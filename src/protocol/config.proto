@@ -446,6 +446,31 @@ message Config {
   optional uint32 zenz_live_correction_right_context_length = 1017
       [default = 6];
 
+  // SystemOne (Jev / Laya) decision-model settings. SystemOne does not generate
+  // text; it reads a state string and answers typed choice questions, so it
+  // replaces the generative Zenz pipeline instead of extending it.
+  //
+  // Endpoint and model name are the values verified against the live OpenCode
+  // Zen gateway in tools/mozkey-jev-bridge/internal/jev/client.go. The free
+  // model answers keyless, so an empty API key must stay usable: the transport
+  // may send the Authorization header only when a key is configured.
+  optional bool use_systemone_decision = 1050 [default = false];
+
+  optional string systemone_endpoint_url = 1051
+      [default = "https://opencode.ai/zen/v1/systemone"];
+
+  optional string systemone_api_key = 1052 [default = ""];
+
+  optional string systemone_model_name = 1053 [default = "jev-1.13-free"];
+
+  // Per-request budget in milliseconds. A decision that misses this deadline is
+  // abandoned and the already-computed Mozc result is kept, so this value is a
+  // latency ceiling rather than a retry window.
+  optional uint32 systemone_timeout_msec = 1054 [default = 2500];
+
+  // Emits request/response, chosen candidate, and error detail for SystemOne.
+  optional bool systemone_debug_logging = 1055 [default = true];
+
   //////////////////////////////////////////////////////////////
   //
   // Dictionary (80-99)

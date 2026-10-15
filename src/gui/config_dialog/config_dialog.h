@@ -79,6 +79,8 @@ class ConfigDialog : public QDialog, private Ui::ConfigDialog {
   virtual void SelectZenzRightContextSetting(int state);
   virtual void SelectZenzFeedbackReuseSetting(int state);
   virtual void SelectZenzFeedbackAutoBlockSetting(int state);
+  virtual void SelectZenzConditionFieldsVisibility(bool visible);
+  virtual void SelectSystemOneDecisionSetting(int state);
   virtual void SelectAutoConversionSetting(int state);
   virtual void SelectDirectCommitSetting(int state);
   virtual void SelectSuggestionSetting(int state);

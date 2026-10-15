@@ -1074,9 +1074,12 @@
                     <number>6</number>
                    </property>
                    <item>
-                    <widget class="QLabel" name="zenzConditionFieldsSectionLabel">
+                    <widget class="QCheckBox" name="zenzConditionFieldsVisibleCheckBox">
+                     <property name="toolTip">
+                      <string>Zenzai v3/v3.2 のプロンプト条件フィールドの表示を切り替えます。折りたたんでも設定値は保持され、Zenzai v3/v3.2 を使用中は送信内容は変わりません。</string>
+                     </property>
                      <property name="text">
-                      <string>Zenz 条件フィールド</string>
+                      <string>Zenz 条件フィールド (Zenzai v3/v3.2)</string>
                      </property>
                     </widget>
                    </item>
@@ -1950,6 +1953,97 @@
                   <property name="text">
                    <string>管理...</string>
                   </property>
+                 </widget>
+                </item>
+                <item row="39" column="0" colspan="8">
+                 <widget class="QWidget" name="systemoneSectionWidget">
+                  <layout class="QHBoxLayout" name="horizontalLayout_systemoneSection">
+                   <property name="spacing"><number>6</number></property>
+                   <property name="leftMargin"><number>0</number></property>
+                   <property name="topMargin"><number>14</number></property>
+                   <property name="rightMargin"><number>0</number></property>
+                   <property name="bottomMargin"><number>6</number></property>
+                   <item>
+                    <widget class="QLabel" name="systemoneSectionLabel">
+                     <property name="text"><string>システムOne (Jev / Laya) 判断型変換</string></property>
+                     <property name="toolTip"><string>文章を生成せず、状態を読んで選択肢から1つを選ぶ判断型モデルです。生成型の Zenz パイプラインを置き換える場合に使います。</string></property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="Line" name="systemoneSectionLine">
+                     <property name="sizePolicy">
+                      <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+                       <horstretch>0</horstretch><verstretch>0</verstretch>
+                      </sizepolicy>
+                     </property>
+                     <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </widget>
+                </item>
+                <item row="40" column="0" colspan="8">
+                 <widget class="QCheckBox" name="systemoneDecisionCheckBox">
+                  <property name="toolTip"><string>Mozc の変換結果をそのまま使い、別の判断が必要な場合だけシステムOneへ問い合わせます。オフのときは送信も行いません。</string></property>
+                  <property name="text"><string>システムOne (Jev/Laya) による文脈判断変換を有効にする</string></property>
+                 </widget>
+                </item>
+                <item row="41" column="0" colspan="3">
+                 <widget class="QLabel" name="systemoneEndpointUrlLabel">
+                  <property name="toolTip"><string>システムOne のエンドポイント URL です。ローカルのプロキシ経由にする場合はここを書き換えます。</string></property>
+                  <property name="text"><string>エンドポイント URL</string></property>
+                 </widget>
+                </item>
+                <item row="41" column="3" colspan="5">
+                 <widget class="QLineEdit" name="systemoneEndpointUrlLineEdit">
+                  <property name="toolTip"><string>例: https://opencode.ai/zen/v1/systemone</string></property>
+                  <property name="text"><string>https://opencode.ai/zen/v1/systemone</string></property>
+                 </widget>
+                </item>
+                <item row="42" column="0" colspan="3">
+                 <widget class="QLabel" name="systemoneApiKeyLabel">
+                  <property name="toolTip"><string>API キーです。空欄のままでも無料モデルは利用できます。</string></property>
+                  <property name="text"><string>API キー</string></property>
+                 </widget>
+                </item>
+                <item row="42" column="3" colspan="5">
+                 <widget class="QLineEdit" name="systemoneApiKeyLineEdit">
+                  <property name="toolTip"><string>空欄のままでも無料モデルは利用できます。キーを設定した場合のみ Authorization ヘッダーを送信します。</string></property>
+                  <property name="echoMode"><enum>QLineEdit::Password</enum></property>
+                  <property name="placeholderText"><string>未設定 (無料モデルはキー不要)</string></property>
+                 </widget>
+                </item>
+                <item row="43" column="0" colspan="3">
+                 <widget class="QLabel" name="systemoneModelNameLabel">
+                  <property name="toolTip"><string>使用するモデル名です。ゲートウェイが案内する名前に合わせて変更します。</string></property>
+                  <property name="text"><string>モデル名</string></property>
+                 </widget>
+                </item>
+                <item row="43" column="3" colspan="5">
+                 <widget class="QLineEdit" name="systemoneModelNameLineEdit">
+                  <property name="toolTip"><string>例: jev-1.13-free</string></property>
+                  <property name="text"><string>jev-1.13-free</string></property>
+                 </widget>
+                </item>
+                <item row="44" column="0" colspan="3">
+                 <widget class="QLabel" name="systemoneTimeoutLabel">
+                  <property name="toolTip"><string>1回の問い合わせで待つ上限です。超過した場合は Mozc の変換結果をそのまま表示します。</string></property>
+                  <property name="text"><string>タイムアウト</string></property>
+                 </widget>
+                </item>
+                <item row="44" column="3" colspan="5">
+                 <widget class="QSpinBox" name="systemoneTimeoutSpinBox">
+                  <property name="minimum"><number>100</number></property>
+                  <property name="maximum"><number>10000</number></property>
+                  <property name="singleStep"><number>100</number></property>
+                  <property name="value"><number>2500</number></property>
+                  <property name="suffix"><string> ms</string></property>
+                 </widget>
+                </item>
+                <item row="45" column="0" colspan="8">
+                 <widget class="QCheckBox" name="systemoneDebugLoggingCheckBox">
+                  <property name="toolTip"><string>送受信内容、選ばれた候補、エラーをログに出力します。送信する文章がログに残るため、共有しにくい内容を扱う場合はオフにしてください。</string></property>
+                  <property name="text"><string>詳細なログを出力する (通信・判定・エラーの可視化)</string></property>
                  </widget>
                 </item>
                </layout>
@@ -3751,6 +3845,13 @@
   <tabstop>zenzFeedbackMinKeyLengthCheckBox</tabstop>
   <tabstop>zenzFeedbackMinKeyLengthSpinBox</tabstop>
   <tabstop>editZenzFeedbackButton</tabstop>
+  <tabstop>zenzConditionFieldsVisibleCheckBox</tabstop>
+  <tabstop>systemoneDecisionCheckBox</tabstop>
+  <tabstop>systemoneEndpointUrlLineEdit</tabstop>
+  <tabstop>systemoneApiKeyLineEdit</tabstop>
+  <tabstop>systemoneModelNameLineEdit</tabstop>
+  <tabstop>systemoneTimeoutSpinBox</tabstop>
+  <tabstop>systemoneDebugLoggingCheckBox</tabstop>
   <tabstop>characterFormEditor</tabstop>
   <tabstop>useModeIndicator</tabstop>
   <tabstop>useDarkModeCandidateWindow</tabstop>

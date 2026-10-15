@@ -575,6 +575,10 @@ ConfigDialog::ConfigDialog()
   QObject::connect(zenzFeedbackAutoBlockCheckBox,
                    SIGNAL(stateChanged(int)), this,
                    SLOT(SelectZenzFeedbackAutoBlockSetting(int)));
+  QObject::connect(zenzConditionFieldsVisibleCheckBox, SIGNAL(toggled(bool)),
+                   this, SLOT(SelectZenzConditionFieldsVisibility(bool)));
+  QObject::connect(systemoneDecisionCheckBox, SIGNAL(stateChanged(int)), this,
+                   SLOT(SelectSystemOneDecisionSetting(int)));
   QObject::connect(useAutoConversion, SIGNAL(stateChanged(int)), this,
                    SLOT(SelectAutoConversionSetting(int)));
   QObject::connect(useDirectCommit, SIGNAL(stateChanged(int)), this,
@@ -1062,6 +1066,9 @@ constexpr uint32_t kMaxZenzAutoBlockMinimumRejectCount = 999;
 constexpr uint32_t kDefaultZenzAutoBlockMinimumRejectPercentage = 50;
 constexpr uint32_t kMinZenzAutoBlockMinimumRejectPercentage = 1;
 constexpr uint32_t kMaxZenzAutoBlockMinimumRejectPercentage = 100;
+constexpr uint32_t kDefaultSystemOneTimeoutMsec = 2500;
+constexpr uint32_t kMinSystemOneTimeoutMsec = 100;
+constexpr uint32_t kMaxSystemOneTimeoutMsec = 10000;
 
 constexpr uint32_t kDefaultInputPreeditTextColor = 0xff5000;
 constexpr uint32_t kDefaultInputPreeditBackgroundColor = 0xffffcc;
@@ -3661,6 +3668,28 @@ void ConfigDialog::ConvertFromProto(const config::Config &config) {
   SelectZenzFeedbackReuseSetting(
       static_cast<int>(zenzFeedbackReuseCheckBox->isChecked()));
 
+  SET_CHECKBOX(systemoneDecisionCheckBox, use_systemone_decision);
+  // Endpoint, model name, and API key fall back to the proto defaults, so an
+  // unset field shows the value the transport would actually use.
+  systemoneEndpointUrlLineEdit->setText(
+      ToQString(config.systemone_endpoint_url()));
+  systemoneApiKeyLineEdit->setText(ToQString(config.systemone_api_key()));
+  systemoneModelNameLineEdit->setText(
+      ToQString(config.systemone_model_name()));
+  const uint32_t systemone_timeout_msec =
+      config.has_systemone_timeout_msec() ? config.systemone_timeout_msec()
+                                          : kDefaultSystemOneTimeoutMsec;
+  systemoneTimeoutSpinBox->setValue(
+      static_cast<int>(std::clamp(systemone_timeout_msec,
+                                  kMinSystemOneTimeoutMsec,
+                                  kMaxSystemOneTimeoutMsec)));
+  SET_CHECKBOX(systemoneDebugLoggingCheckBox, systemone_debug_logging);
+  SelectSystemOneDecisionSetting(
+      static_cast<int>(systemoneDecisionCheckBox->isChecked()));
+
+  SelectZenzConditionFieldsVisibility(
+      zenzConditionFieldsVisibleCheckBox->isChecked());
+
   SET_CHECKBOX(useAutoConversion, use_auto_conversion);
   kutenCheckBox->setChecked(config.auto_conversion_key() &
                             config::Config::AUTO_CONVERSION_KUTEN);
@@ -3980,6 +4009,17 @@ void ConfigDialog::ConvertToProto(config::Config *config) const {
   config->set_zenz_auto_block_minimum_reject_percentage(
       static_cast<uint32_t>(
           zenzFeedbackAutoBlockMinimumRejectPercentageSpinBox->value()));
+
+  GET_CHECKBOX(systemoneDecisionCheckBox, use_systemone_decision);
+  config->set_systemone_endpoint_url(
+      systemoneEndpointUrlLineEdit->text().toUtf8().constData());
+  config->set_systemone_api_key(
+      systemoneApiKeyLineEdit->text().toUtf8().constData());
+  config->set_systemone_model_name(
+      systemoneModelNameLineEdit->text().toUtf8().constData());
+  config->set_systemone_timeout_msec(
+      static_cast<uint32_t>(systemoneTimeoutSpinBox->value()));
+  GET_CHECKBOX(systemoneDebugLoggingCheckBox, systemone_debug_logging);
 
   GET_CHECKBOX(useAutoConversion, use_auto_conversion);
   GET_CHECKBOX(useDirectCommit, use_direct_commit);
@@ -5041,6 +5081,35 @@ void ConfigDialog::SelectZenzFeedbackAutoBlockSetting(int state) {
   zenzFeedbackAutoBlockRejectThresholdSpinBox->setEnabled(enabled);
   zenzFeedbackAutoBlockMinimumRejectPercentageLabel->setEnabled(enabled);
   zenzFeedbackAutoBlockMinimumRejectPercentageSpinBox->setEnabled(enabled);
+}
+
+void ConfigDialog::SelectZenzConditionFieldsVisibility(bool visible) {
+  // Display-only fold. The stored values are never cleared and the Zenzai
+  // v3/v3.2 prompt payload is unchanged while these rows are collapsed.
+  zenzLiveCorrectionProfileLabel->setVisible(visible);
+  zenzLiveCorrectionProfileLineEdit->setVisible(visible);
+  zenzLiveCorrectionTopicLabel->setVisible(visible);
+  zenzLiveCorrectionTopicLineEdit->setVisible(visible);
+  zenzLiveCorrectionStyleLabel->setVisible(visible);
+  zenzLiveCorrectionStyleLineEdit->setVisible(visible);
+  zenzLiveCorrectionSettingsLabel->setVisible(visible);
+  zenzLiveCorrectionSettingsLineEdit->setVisible(visible);
+}
+
+void ConfigDialog::SelectSystemOneDecisionSetting(int state) {
+  const bool enabled = static_cast<bool>(state);
+
+  systemoneEndpointUrlLabel->setEnabled(enabled);
+  systemoneEndpointUrlLineEdit->setEnabled(enabled);
+  systemoneApiKeyLabel->setEnabled(enabled);
+  systemoneApiKeyLineEdit->setEnabled(enabled);
+  systemoneModelNameLabel->setEnabled(enabled);
+  systemoneModelNameLineEdit->setEnabled(enabled);
+  systemoneTimeoutLabel->setEnabled(enabled);
+  systemoneTimeoutSpinBox->setEnabled(enabled);
+  // systemoneDebugLoggingCheckBox is deliberately left enabled while the
+  // feature is off: the log is what explains why no request was sent, so
+  // gating it here would hide the only available evidence.
 }
 
 void ConfigDialog::SelectZenzRightContextSetting(int state) {

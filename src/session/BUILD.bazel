@@ -285,6 +285,43 @@ mozc_cc_test(
     ],
 )
 
+# SystemOne (Jev / Laya) client.  Talks to the SystemOne endpoint directly
+# over WinHTTP with no external proxy; see systemone_client.h for the wire
+# format, which mirrors tools/mozkey-jev-bridge/internal/jev/client.go.
+mozc_cc_library(
+    name = "systemone_logger",
+    srcs = ["systemone_logger.cc"],
+    hdrs = ["systemone_logger.h"],
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//session:__pkg__"],
+    # systemone_logger.h includes systemone_client.h for the request and
+    # response types it formats.
+    deps = [
+        ":systemone_client",
+    ],
+)
+
+mozc_cc_library(
+    name = "systemone_client",
+    srcs = ["systemone_client.cc"],
+    hdrs = ["systemone_client.h"],
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//session:__pkg__"],
+    linkopts = ["Winhttp.lib"],
+)
+
+mozc_cc_test(
+    name = "systemone_client_test",
+    size = "small",
+    srcs = ["systemone_client_test.cc"],
+    target_compatible_with = ["@platforms//os:windows"],
+    deps = [
+        ":systemone_client",
+        ":systemone_logger",
+        "//testing:gunit_main",
+    ],
+)
+
 mozc_cc_test(
     name = "zenz_segment_projection_test",
     size = "small",
