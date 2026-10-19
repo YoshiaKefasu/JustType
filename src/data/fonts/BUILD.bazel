@@ -1,0 +1,37 @@
+# Copyright 2026 The Mozkey Authors
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are
+# met:
+#
+#     * Redistributions of source code must retain the above copyright
+# notice, this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above
+# copyright notice, this list of conditions and the following disclaimer in
+# the documentation and/or other materials provided with the
+# distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.
+
+# Gen Interface JP Display faces, shipped inside the MSI under <MozcDir>\fonts.
+#
+# The candidate window and the config dialog both ask for the family by name
+# and register these files per process (AddFontResourceExW with FR_PRIVATE on
+# the renderer side, QFontDatabase::addApplicationFont on the dialog side), so
+# the product face resolves on a machine where the user never installed it.
+# Regular and Bold are both required: the candidate window weights its labels,
+# and a weight GDI cannot find is synthesised by the rasteriser instead of
+# being drawn from the shipped outlines.
+
+package(default_visibility = ["//win32/installer:__pkg__"])
+
+exports_files([
+    "GenInterfaceJPDisplay-Regular.ttf",
+    "GenInterfaceJPDisplay-Bold.ttf",
+], visibility = [
+    "//session:__pkg__",
+    "//win32/installer:__pkg__",
+])

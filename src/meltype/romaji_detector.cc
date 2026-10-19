@@ -155,6 +155,7 @@ constexpr KanaSpellings kStrictTable[] = {
     {"どぃ", "dwi"},
     {"どぇ", "dwe"},
     {"どぅ", "dwu"},
+    {"ー", "-"},
 };
 
 // 変換ボックスでだけ使う綴り (小書き文字・外来音)。英語かどうかの判定には使わない。
@@ -216,6 +217,7 @@ constexpr KanaSpellings kCompositionTable[] = {
     {"つぃ", "tsi"},
     {"つぇ", "tse"},
     {"つぉ", "tso"},
+    {"ー", "-"},
 };
 
 bool IsVowel(char c) { return c == 'a' || c == 'i' || c == 'u' || c == 'e' || c == 'o'; }
@@ -317,7 +319,7 @@ RomajiDetector::Analysis AnalyzeCore(std::string_view letters, bool strict_start
 
   while (i < letters.size()) {
     const char c = letters[i];
-    if (c < 'a' || c > 'z') return invalid();
+    if ((c < 'a' || c > 'z') && c != '-') return invalid();
 
     // ん: 次が n か子音 (y を除く) なら「ん」。
     if (c == 'n' && i + 1 < letters.size() &&

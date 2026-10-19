@@ -93,6 +93,28 @@ bool EndsWith(std::string_view text, std::string_view suffix) {
          text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+// 英単語の直後に続けて、たまたま実在の英単語と同じ綴りになる日本語の
+// 助詞・助動詞・形式名詞 (made=まで, demo=でも, tame=ため, wake=わけ,
+// toki=とき, node=ので, mono=もの, koto=こと, koso=こそ)。英語の区間の
+// すぐ後ろなら英語同士の合体ではなく日本語に切り分ける。
+constexpr std::string_view kJapaneseNominalTails[] = {
+    "made", "demo", "tame", "wake", "toki",
+    "node", "mono", "koto", "koso",
+};
+
+/// 区間が英字のみで、全綴りが上の日本語の助詞・形式名詞と一致するとき true。
+bool IsJapaneseNominalTail(std::string_view raw) {
+  if (raw.empty()) return false;
+  for (char c : raw) {
+    if (!IsAsciiLetter(c)) return false;
+  }
+  const std::string lower = ToLowerAscii(raw);
+  for (std::string_view word : kJapaneseNominalTails) {
+    if (lower == word) return true;
+  }
+  return false;
+}
+
 // 助詞 (の が を に で と は も わ へ や) で始まっていれば、その助詞。
 std::optional<std::string_view> StartsWithParticle(std::string_view letters) {
   for (std::string_view particle : kParticles) {
@@ -125,12 +147,17 @@ bool IsSuruForm(std::string_view kana) {
   }
   if (!starts) return false;
   // ひらがな (U+3041 - U+3096) と ー だけか。
+  // UTF-8 の第 2 バイトで区切る: b2==0x81 は U+3040..U+307F、b2==0x82 は
+  // U+3080..U+30BF。旧判定 (b2==0x81 && b3<=0x96) は し (E3 81 97) 以降を
+  // 誤って非ひらがなにし、する活用がぜっと効かなかった。
   for (std::size_t i = 0; i < kana.size();) {
     const unsigned char c = static_cast<unsigned char>(kana[i]);
     if (c == 0xE3 && i + 2 < kana.size()) {
       const unsigned char b2 = static_cast<unsigned char>(kana[i + 1]);
       const unsigned char b3 = static_cast<unsigned char>(kana[i + 2]);
-      const bool hiragana = b2 == 0x81 && b3 >= 0x81 && b3 <= 0x96;
+      const bool hiragana =
+          (b2 == 0x81 && b3 >= 0x81 && b3 <= 0xBF) ||
+          (b2 == 0x82 && b3 >= 0x80 && b3 <= 0x96);
       const bool prolonged = b2 == 0x83 && b3 == 0xBC;  // ー
       if (!hiragana && !prolonged) return false;
       i += 3;
@@ -266,6 +293,10 @@ Context::Syllable Context::NextSyllable(int i) const {
   const unsigned char c = static_cast<unsigned char>(input_[static_cast<std::size_t>(i)]);
   const bool ascii_letter = IsAsciiLetter(static_cast<char>(c));
   if (c < 0x80 && !ascii_letter) {
+    // ハイフンは日本語の長音記号「ー」として扱う (sa-ba -> さーば)。
+    if (c == '-') {
+      return {1, "ー", true};
+    }
     // 空白・記号はそのまま 1 文字ぶん進む (読めない英字ではない)。
     return {1, std::string(Sub(i, i + 1)), true};
   }
@@ -522,6 +553,17 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
     return false;
   }
 
+  // 英語の末尾 's' で、後ろに母音が続く場合 (discordsa-ba -> discord + sa-ba):
+  if (lower.size() >= 3 && lower.back() == 's' && next) {
+    const char n = ToLowerAscii(*next);
+    if (n == 'a' || n == 'i' || n == 'u' || n == 'e' || n == 'o') {
+      const std::string without_s = lower.substr(0, lower.size() - 1);
+      if (IsKnownEnglishWord(without_s)) {
+        return false;
+      }
+    }
+  }
+
   const RomajiDetector::Analysis analysis = romaji_.Analyze(lower);
   const RomajiDetector::Analysis fragment = romaji_.AnalyzeFragment(lower);
   // 知らない英字の語 + 助詞 (grok|ga、figma|de) は、助詞までを 1 語にしない。
@@ -538,8 +580,10 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
 
   // 大文字で始まる語 (Shift を押して打った) は固有名詞や英文。
   if (IsUpperAscii(span.front()) && (exact || prefix || at_end)) return true;
-  // ローマ字として最後まで読めても日本語の語にならない英単語 (feature = ふぇあつれ)。
-  if (readable_english) return true;
+  // readable_english の単語でも、日本語として最後まで読める語 (rose=ろせ, tenai=てない等) は
+  // 強制英語化せず、後段の文脈判定 (ambiguous) に回す。
+  // ローマ字として最後まで読めない語 (analysis.is_valid が false) のみ即英語とする。
+  if (readable_english && (!analysis.is_valid || !analysis.partial.empty())) return true;
   // 5 文字以上の英単語で、ローマ字としても読めるもの:
   // - c 行の綴り (camera、coffee) は英語。日本語を打つときは k を使う。
   // - ローマ字として読むと ぢ・づ になる綴り (radio = らぢお) で、ふつうの日本語の語に
@@ -556,7 +600,9 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
       return true;
     }
   }
-  if (lower.size() >= 3 && readable_english) return true;
+  // readable_english の単語でも、日本語として読める語 (rose=ろせ, tenai=てない等) は
+  // 強制英語化せず文脈判定に回す。
+  if (lower.size() >= 3 && readable_english && (!analysis.is_valid || !analysis.partial.empty())) return true;
   // -pedia (pedia / protopedia …)。ローマ字だと ぺぢあ になり、途中の to が割れる。
   if (IsPediaEnglishWord(lower)) return true;
 
@@ -632,6 +678,22 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
   // +1・日本語なら -1、後ろも同じように数え、合計が必要な点数に届けば英語
   // (どちらも分からない・食い違うときは日本語)。
   // 助詞などと同じ 2 文字の語 (no, to, ga) は、前後の両方が英語のときだけ。
+  // 引用の「って」がそのまま続く英単語 (minuteっていう英語): 引用される語は
+  // 前後の文脈が無くても英語として切り出す。日本語の綴り (きって・くって) は
+  // japanese.txt の語の綴りなので (japanese.HasPrefix) ここで除かれる。
+  if ((exact || spell_word) && !small_kana_spelling && lower.size() >= 4 &&
+      !dictionaries_.japanese.HasPrefix(lower)) {
+    const std::size_t begin =
+        static_cast<std::size_t>(span.data() - input_.data());
+    const std::size_t letters_end = begin + span.size();
+    if (begin <= static_cast<std::size_t>(n_) &&
+        letters_end + 2 < static_cast<std::size_t>(n_) &&
+        input_[letters_end] == 't' && input_[letters_end + 1] == 't' &&
+        input_[letters_end + 2] == 'e') {
+      return true;
+    }
+  }
+
   const bool ambiguous =
       (start_of_input && ends_word)
           ? (exact || spell_word)
@@ -810,6 +872,17 @@ std::vector<Segment> Context::Run() {
         if (!CanBeEnglishSpan(i, j, at_end && !options_.final, next)) continue;
         // 英単語のすぐ後ろの する の活用 (push + site = して) は日本語。
         if (preceded_by_english && IsSuruForm(JapaneseKana(i, j))) continue;
+        // 英単語のすぐ後ろの、たまたま実在の英単語と同じ綴りの日本語の
+        // 助詞・形式名詞 (slack + made = まで) は日本語。英語同士の
+        // 2 乗スコアでの合体を防ぐ (slackmade が全体英語に化けるのを防ぐ)。
+        if (preceded_by_english && IsJapaneseNominalTail(Sub(i, j))) continue;
+        // 英語の末尾 's' を日本語側に移すとすると活用の頭になるなら、その 's' は
+        // 日本語の一部 (stopshita → stop + した。stops + ひた ではない)。
+        // 辞書にある 's' 終わりの短い英単語 (stops) が長さの 2 乗で勝つのを防ぐ。
+        if (j - i >= 3 && input_[static_cast<std::size_t>(j) - 1] == 's' &&
+            IsSuruForm(JapaneseKana(j - 1, n_))) {
+          continue;
+        }
         if (!IsEnglishSpan(Sub(i, j),
                            at_end, before, after, /*start_of_input=*/i == 0,
                            /*unreadable=*/HasUnreadable(i, j), next,

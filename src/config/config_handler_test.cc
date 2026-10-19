@@ -85,7 +85,9 @@ void SetMozkeyProductDefaultsForTesting(Config* config) {
   config->set_show_candidate_window_on_initial_conversion(true);
   config->set_use_direct_commit(true);
   config->set_direct_commit_key(kExpectedMozkeyDirectCommitKey);
-  config->set_use_zenz_live_correction(true);
+  // Product default: the generative Zenz scorer is not shipped, so the
+  // pipeline switch defaults off (config_handler.cc).
+  config->set_use_zenz_live_correction(false);
   config->set_use_zenz_feedback_learning(true);
   config->set_use_zenz_feedback_recording(true);
   config->set_use_zenz_feedback_reuse(true);
@@ -114,14 +116,12 @@ void ExpectMozkeyProductDefaults(const Config& config) {
   EXPECT_TRUE(config.use_direct_commit());
   EXPECT_EQ(config.direct_commit_key(), kExpectedMozkeyDirectCommitKey);
 
-  EXPECT_TRUE(config.use_zenz_live_correction());
+  // The pipeline switch defaults off: the generative Zenz scorer is not
+  // shipped (see ApplyMozkeyProductDefaults).
+  EXPECT_FALSE(config.use_zenz_live_correction());
   EXPECT_FALSE(config.defer_live_conversion_display_until_zenz_result());
-  EXPECT_EQ(config.zenz_live_correction_delay_msec(), 1000);
-  EXPECT_EQ(config.zenz_deferred_presentation_timeout_msec(), 250);
-  EXPECT_EQ(config.zenz_live_correction_timeout_msec(), 180);
-  EXPECT_EQ(config.zenz_live_correction_min_key_length(), 2);
-  EXPECT_EQ(config.zenz_live_correction_left_context_length(), 24);
-  EXPECT_TRUE(config.use_zenz_synthetic_candidate());
+  // The remaining zenz_live_correction_* tuning fields carry proto defaults
+  // only (no product default): the correction pipeline no longer ships.
   EXPECT_TRUE(config.use_zenz_feedback_learning());
   EXPECT_TRUE(config.use_zenz_feedback_recording());
   EXPECT_TRUE(config.use_zenz_feedback_reuse());
@@ -129,10 +129,7 @@ void ExpectMozkeyProductDefaults(const Config& config) {
   EXPECT_TRUE(config.use_zenz_feedback_min_key_length());
   EXPECT_EQ(config.zenz_feedback_min_key_length(), 7);
   EXPECT_TRUE(config.use_zenz_auto_block_rejected_correction());
-  EXPECT_EQ(config.zenz_auto_block_reject_threshold(), 1);
-  EXPECT_EQ(config.zenz_auto_block_minimum_reject_percentage(), 50);
   EXPECT_TRUE(config.use_zenz_live_correction_right_context());
-  EXPECT_EQ(config.zenz_live_correction_right_context_length(), 6);
 
   EXPECT_EQ(config.history_learning_level(), Config::DEFAULT_HISTORY);
   EXPECT_TRUE(config.use_history_suggest());
@@ -371,192 +368,6 @@ TEST_F(ConfigHandlerTest, CustomKeymapMigrationPreservesOccupiedCtrlDelete) {
             std::string::npos);
 }
 
-TEST_F(ConfigHandlerTest, CustomKeymapMigratesZenzSpaceExactlyOnce) {
-  TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();
-  const std::string config_file =
-      FileUtil::JoinPath(temp_dir.path(), "zenz_space_migration.db");
-  ASSERT_OK(FileUtil::UnlinkIfExists(config_file));
-  ConfigHandler::SetConfigFileNameForTesting(config_file);
-
-  Config config;
-  config.set_session_keymap(Config::CUSTOM);
-  config.set_custom_keymap_table(
-      "status\tkey\tcommand\n"
-      "Conversion\tSpace\tConvertNext\n"
-      "Conversion\tEnter\tCommit\n");
-  ConfigHandler::SetConfig(config);
-
-  const std::string migrated =
-      ConfigHandler::GetCopiedConfig().custom_keymap_table();
-  constexpr absl::string_view row =
-      "ZenzConversion\tSpace\tRevertZenzToMozc";
-  const size_t at = migrated.find(row);
-  ASSERT_NE(at, std::string::npos);
-  EXPECT_EQ(migrated.find(row, at + 1), std::string::npos);
-  EXPECT_NE(migrated.find("Conversion\tSpace\tConvertNext"),
-            std::string::npos);
-  EXPECT_NE(migrated.find("Conversion\tEnter\tCommit"),
-            std::string::npos);
-
-  ConfigHandler::SetConfig(ConfigHandler::GetCopiedConfig());
-  EXPECT_EQ(ConfigHandler::GetCopiedConfig().custom_keymap_table(), migrated);
-
-  // The migrated row must survive storage and a subsequent reload.
-  ConfigHandler::Reload();
-  EXPECT_EQ(ConfigHandler::GetCopiedConfig().custom_keymap_table(), migrated);
-  std::ifstream ifs(config_file, std::ios::binary);
-  ASSERT_TRUE(ifs);
-  Config stored;
-  ASSERT_TRUE(stored.ParseFromIstream(&ifs));
-  EXPECT_EQ(stored.custom_keymap_table(), migrated);
-}
-
-TEST_F(ConfigHandlerTest, CustomKeymapZenzMigrationOnReloadPersists) {
-  TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();
-  const std::string config_file =
-      FileUtil::JoinPath(temp_dir.path(), "zenz_space_reload.db");
-  ASSERT_OK(FileUtil::UnlinkIfExists(config_file));
-  ConfigHandler::SetConfigFileNameForTesting(config_file);
-
-  Config legacy;
-  legacy.set_session_keymap(Config::CUSTOM);
-  legacy.set_custom_keymap_table(
-      "status\tkey\tcommand\n"
-      "Conversion\tSpace\tConvertNext\n");
-  {
-    std::ofstream ofs(config_file, std::ios::binary | std::ios::trunc);
-    ASSERT_TRUE(ofs);
-    const std::string bytes = legacy.SerializeAsString();
-    ofs.write(bytes.data(), bytes.size());
-    ASSERT_TRUE(ofs);
-  }
-  ConfigHandler::Reload();
-  const auto migrated = ConfigHandler::GetCopiedConfig().custom_keymap_table();
-  EXPECT_NE(migrated.find("ZenzConversion\tSpace\tRevertZenzToMozc"),
-            std::string::npos);
-  ConfigHandler::Reload();
-  EXPECT_EQ(ConfigHandler::GetCopiedConfig().custom_keymap_table(), migrated);
-  std::ifstream ifs(config_file, std::ios::binary);
-  ASSERT_TRUE(ifs);
-  Config stored;
-  ASSERT_TRUE(stored.ParseFromIstream(&ifs));
-  EXPECT_EQ(stored.custom_keymap_table(), migrated);
-}
-
-TEST_F(ConfigHandlerTest, CustomKeymapZenzMigrationPreservesUserSpaceRules) {
-  TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();
-  const std::string config_file =
-      FileUtil::JoinPath(temp_dir.path(), "zenz_space_custom_rules.db");
-  ASSERT_OK(FileUtil::UnlinkIfExists(config_file));
-  ConfigHandler::SetConfigFileNameForTesting(config_file);
-
-  constexpr absl::string_view kZenzRevert =
-      "ZenzConversion\tSpace\tRevertZenzToMozc";
-  const std::vector<std::string> custom_tables = {
-      // User explicitly selected a different Zenz action.
-      "status\tkey\tcommand\n"
-      "Conversion\tSpace\tConvertNext\n"
-      "ZenzConversion\tSpace\tCommit\n",
-      // Non-standard base action and multi-step command: leave untouched.
-      "status\tkey\tcommand\n"
-      "Conversion\tSpace\tConvertPrev\n",
-      "status\tkey\tcommand\n"
-      "Conversion\tSpace\tConvertNext|ConvertNext\n",
-      // Missing base action and multiple base mappings are ambiguous.
-      "status\tkey\tcommand\n"
-      "Conversion\tEnter\tCommit\n",
-      "status\tkey\tcommand\n"
-      "Conversion\tSpace\tConvertNext\n"
-      "Conversion\tSpace\tCommit\n",
-  };
-  for (const std::string& table : custom_tables) {
-    Config config;
-    config.set_session_keymap(Config::CUSTOM);
-    config.set_custom_keymap_table(table);
-    ConfigHandler::SetConfig(config);
-    const std::string saved =
-        ConfigHandler::GetCopiedConfig().custom_keymap_table();
-    EXPECT_EQ(saved.find(kZenzRevert), std::string::npos);
-    EXPECT_NE(saved.find(table.substr(table.find("\n") + 1)),
-              std::string::npos);
-  }
-}
-
-TEST_F(ConfigHandlerTest, CustomKeymapZenzMigrationPreservesExistingRevert) {
-  TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();
-  const std::string config_file =
-      FileUtil::JoinPath(temp_dir.path(), "zenz_space_existing_revert.db");
-  ASSERT_OK(FileUtil::UnlinkIfExists(config_file));
-  ConfigHandler::SetConfigFileNameForTesting(config_file);
-
-  Config config;
-  config.set_session_keymap(Config::CUSTOM);
-  config.set_custom_keymap_table(
-      "status\tkey\tcommand\n"
-      "Conversion\tSpace\tConvertNext\n"
-      "ZenzConversion\tSpace\tRevertZenzToMozc\n");
-  ConfigHandler::SetConfig(config);
-  const std::string table = ConfigHandler::GetCopiedConfig().custom_keymap_table();
-  constexpr absl::string_view kRevert =
-      "ZenzConversion\tSpace\tRevertZenzToMozc";
-  const size_t first = table.find(kRevert);
-  ASSERT_NE(first, std::string::npos);
-  EXPECT_EQ(table.find(kRevert, first + 1), std::string::npos);
-}
-
-TEST_F(ConfigHandlerTest, LiveBackspaceMigrationAddsOnlyLiveRuleOnce) {
-  TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();
-  const std::string config_file =
-      FileUtil::JoinPath(temp_dir.path(), "live_backspace_migration.db");
-  ASSERT_OK(FileUtil::UnlinkIfExists(config_file));
-  ConfigHandler::SetConfigFileNameForTesting(config_file);
-
-  Config config;
-  config.set_session_keymap(Config::CUSTOM);
-  config.set_custom_keymap_table(
-      "status\tkey\tcommand\n"
-      "Conversion\tBackspace\tCancel\n"
-      "Conversion\tSpace\tConvertNext\n");
-  ConfigHandler::SetConfig(config);
-  const std::string table = ConfigHandler::GetCopiedConfig().custom_keymap_table();
-  constexpr absl::string_view live_row =
-      "LiveConversion\tBackspace\tBackspace";
-  constexpr absl::string_view zenz_row =
-      "ZenzConversion\tBackspace\tBackspace";
-  const size_t live_pos = table.find(live_row);
-  ASSERT_NE(live_pos, std::string::npos);
-  EXPECT_EQ(table.find(live_row, live_pos + 1), std::string::npos);
-  // Zenz correction inherits LiveConversion (live origin) or Conversion
-  // (manual origin). It must not receive a shared Backspace override.
-  EXPECT_EQ(table.find(zenz_row), std::string::npos);
-  ConfigHandler::SetConfig(ConfigHandler::GetCopiedConfig());
-  EXPECT_EQ(ConfigHandler::GetCopiedConfig().custom_keymap_table(), table);
-  ConfigHandler::Reload();
-  EXPECT_EQ(ConfigHandler::GetCopiedConfig().custom_keymap_table(), table);
-}
-
-TEST_F(ConfigHandlerTest, LiveBackspaceMigrationPreservesExplicitOverrides) {
-  TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();
-  const std::string config_file =
-      FileUtil::JoinPath(temp_dir.path(), "live_backspace_overrides.db");
-  ASSERT_OK(FileUtil::UnlinkIfExists(config_file));
-  ConfigHandler::SetConfigFileNameForTesting(config_file);
-  Config config;
-  config.set_session_keymap(Config::CUSTOM);
-  config.set_custom_keymap_table(
-      "status\tkey\tcommand\n"
-      "Conversion\tBackspace\tCancel\n"
-      "LiveConversion\tBackspace\tCommit\n");
-  ConfigHandler::SetConfig(config);
-  const std::string table = ConfigHandler::GetCopiedConfig().custom_keymap_table();
-  EXPECT_NE(table.find("LiveConversion\tBackspace\tCommit"),
-            std::string::npos);
-  EXPECT_EQ(table.find("ZenzConversion\tBackspace\tBackspace"),
-            std::string::npos);
-  EXPECT_EQ(table.find("LiveConversion\tBackspace\tBackspace"),
-            std::string::npos);
-}
-
 TEST_F(ConfigHandlerTest, LiveBackspaceMigrationWithExistingLiveBindingIsNoop) {
   TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();
   const std::string config_file =
@@ -599,32 +410,6 @@ TEST_F(ConfigHandlerTest, LiveBackspaceMigrationWithExistingLiveBindingIsNoop) {
   const std::string reloaded_bytes((std::istreambuf_iterator<char>(ifs)),
                                    std::istreambuf_iterator<char>());
   EXPECT_EQ(reloaded_bytes, saved_bytes);
-}
-
-TEST_F(ConfigHandlerTest, LiveBackspaceMigrationPreservesCustomZenzBinding) {
-  TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();
-  const std::string config_file =
-      FileUtil::JoinPath(temp_dir.path(), "live_backspace_custom_zenz.db");
-  ASSERT_OK(FileUtil::UnlinkIfExists(config_file));
-  ConfigHandler::SetConfigFileNameForTesting(config_file);
-
-  Config config;
-  config.set_session_keymap(Config::CUSTOM);
-  config.set_custom_keymap_table(
-      "status\tkey\tcommand\n"
-      "Conversion\tBackspace\tCancel\n"
-      "ZenzConversion\tBackspace\tCommit\n");
-  ConfigHandler::SetConfig(config);
-  const std::string migrated =
-      ConfigHandler::GetCopiedConfig().custom_keymap_table();
-  EXPECT_NE(migrated.find("LiveConversion\tBackspace\tBackspace"),
-            std::string::npos);
-  EXPECT_NE(migrated.find("ZenzConversion\tBackspace\tCommit"),
-            std::string::npos);
-  EXPECT_EQ(migrated.find("ZenzConversion\tBackspace\tBackspace"),
-            std::string::npos);
-  ConfigHandler::Reload();
-  EXPECT_EQ(ConfigHandler::GetCopiedConfig().custom_keymap_table(), migrated);
 }
 
 TEST_F(ConfigHandlerTest, SwitchingConfigFilesDoesNotReuseOldHash) {
@@ -762,8 +547,6 @@ TEST_F(ConfigHandlerTest, MozkeyProductDefaultsPreserveExplicitSettings) {
 #endif  // _WIN32
 }
 
-// A legacy on-disk config may contain only field 1011. Normalization must
-// preserve that choice for all three new fields without rewriting the file.
 TEST_F(ConfigHandlerTest, LegacyZenzFeedbackSettingsMigrateWithoutDiskRewrite) {
   for (const bool legacy_enabled : std::array{false, true}) {
     TempDirectory temp_dir = testing::MakeTempDirectoryOrDie();

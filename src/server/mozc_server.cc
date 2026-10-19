@@ -42,6 +42,7 @@
 #include "base/run_level.h"
 #include "base/system_util.h"
 #include "base/vlog.h"
+#include "session/meltype_bridge.h"
 #include "session/session_server.h"
 
 #ifdef _WIN32
@@ -109,6 +110,11 @@ int MozcServer::Run() {
       return -1;
     }
 
+    // Load the Meltype dictionaries (several MB) on a background thread while
+    // the server idles, so the first keystroke does not stall for the
+    // synchronous load.
+    session::MeltypeBridge::PreloadAsync();
+
 #if defined(_WIN32)
     // On Windows, ShutdownSessionCallback is not called intentionally in order
     // to avoid crashes oritinates from it. See b/2696087.
@@ -129,6 +135,9 @@ int MozcServer::Run() {
 }
 
 int MozcServer::Finalize() {
+  // Never exit while the Meltype background loader is still running, so the
+  // load cannot race static destruction.
+  session::MeltypeBridge::WaitForPreload();
   return 0;
 }
 

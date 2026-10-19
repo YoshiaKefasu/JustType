@@ -173,12 +173,15 @@ mozc_cc_test(
     deps = [
         ":rewriter_interface",
         ":zenz_feedback_candidate_rewriter",
+        "//base:system_util",
+        "//base/file:temp_dir",
         "//converter:attribute",
         "//converter:segments",
         "//protocol:config_cc_proto",
         "//request:conversion_request",
         "//session:zenz_feedback_store",
         "//testing:gunit_main",
+        "//testing:mozctest",
     ],
 )
 

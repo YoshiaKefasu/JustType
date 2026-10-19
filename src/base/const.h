@@ -99,6 +99,13 @@ inline constexpr wchar_t kElevatedProcessDisabledKey[] =
     L"Software\\Policies\\Google\\Google Japanese Input\\Preferences";
 #else   // !GOOGLE_JAPANESE_INPUT_BUILD
 inline constexpr char kCompanyNameInEnglish[] = "Mozc Project";
+// Directory name of the user profile directory under %LocalLow%.
+// The product was renamed from Mozc to JustType, so a fresh install uses
+// "JustType" while "Mozc" is kept for users who already have that directory.
+// Note that this is intentionally different from |kProductNameInEnglish|,
+// which still names the install directory and the binaries.
+inline constexpr char kUserProfileDirectoryName[] = "JustType";
+inline constexpr char kLegacyUserProfileDirectoryName[] = "Mozc";
 // Use Local prefix so that modules running under AppContainer can access.
 inline constexpr char kEventPathPrefix[] = "Local\\Mozc.event.";
 inline constexpr char kMutexPathPrefix[] = "Local\\Mozc.mutex.";

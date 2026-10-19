@@ -396,8 +396,8 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Configure and manage Zenz learning under [Advanced] -&gt; [Zenz Learning].</source>
-        <translation>※Zenz学習は、〔入力補助〕→〔Zenz 学習〕で設定・管理できます。</translation>
+        <source>Configure and manage システムOne学習 under [Advanced] -&gt; [システムOne学習].</source>
+        <translation>※システムOne学習は、〔入力補助〕→〔システムOne 学習〕で設定・管理できます。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -416,8 +416,8 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="1134"/>
-        <source>Temporarily disable conversion personalization (including Zenz learning), history-based suggestions and user dictionary</source>
-        <translation>一時的に学習機能(Zenz学習含む)、入力履歴からのサジェスト機能、ユーザ辞書機能を無効にする</translation>
+        <source>Temporarily disable conversion personalization (including システムOne学習), history-based suggestions and user dictionary</source>
+        <translation>一時的に学習機能(システムOne学習含む)、入力履歴からのサジェスト機能、ユーザ辞書機能を無効にする</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="1175"/>
@@ -547,53 +547,53 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz ライブ補正</source>
-        <translation>Zenz ライブ補正</translation>
+        <source>システムOne 判断型補正</source>
+        <translation>システムOne 判断型補正</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 補正中の文字</source>
-        <translation>Zenz 補正中の文字</translation>
+        <source>システムOne 補正中の文字</source>
+        <translation>システムOne 補正中の文字</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 補正結果が返るまで通常のライブ変換結果を表示しない</source>
-        <translation>Zenz 補正結果が返るまで通常のライブ変換結果を表示しない</translation>
+        <source>システムOne 補正結果が返るまで通常のライブ変換結果を表示しない</source>
+        <translation>システムOne 補正結果が返るまで通常のライブ変換結果を表示しない</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 補正が実行される場合、補正結果が確定するまで通常の Mozc ライブ変換結果を表示しません。Zenz が採用されなかった場合は Mozc 結果を表示します。</source>
-        <translation>Zenz 補正が実行される場合、補正結果が確定するまで通常の Mozc ライブ変換結果を表示しません。Zenz が採用されなかった場合は Mozc 結果を表示します。</translation>
+        <source>システムOne 補正が実行される場合、補正結果が確定するまで通常の Mozc ライブ変換結果を表示しません。システムOne が採用されなかった場合は Mozc 結果を表示します。</source>
+        <translation>システムOne 補正が実行される場合、補正結果が確定するまで通常の Mozc ライブ変換結果を表示しません。システムOne が採用されなかった場合は Mozc 結果を表示します。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 補正開始後の最大待機時間</source>
-        <translation>Zenz 補正開始後の最大待機時間</translation>
+        <source>システムOne 補正開始後の最大待機時間</source>
+        <translation>システムOne 補正開始後の最大待機時間</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>「通常のライブ変換結果を表示しない」が有効な場合、Zenz 補正要求の送信後、この時間以内に結果が返らなければ、その回の Zenz 補正を中止して通常の Mozc ライブ変換結果を表示します。</source>
-        <translation>「通常のライブ変換結果を表示しない」が有効な場合、Zenz 補正要求の送信後、この時間以内に結果が返らなければ、その回の Zenz 補正を中止して通常の Mozc ライブ変換結果を表示します。</translation>
+        <source>「通常のライブ変換結果を表示しない」が有効な場合、システムOne 補正要求の送信後、この時間以内に結果が返らなければ、その回の システムOne 補正を中止して通常の Mozc ライブ変換結果を表示します。</source>
+        <translation>「通常のライブ変換結果を表示しない」が有効な場合、システムOne 補正要求の送信後、この時間以内に結果が返らなければ、その回の システムOne 補正を中止して通常の Mozc ライブ変換結果を表示します。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 条件フィールド</source>
-        <translation>Zenz 条件フィールド</translation>
+        <source>システムOne 条件フィールド</source>
+        <translation>システムOne 条件フィールド</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 学習</source>
-        <translation>Zenz 学習</translation>
+        <source>システムOne 学習</source>
+        <translation>システムOne 学習</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>U+EE03 profile として Zenzai v3/v3.2 のプロンプトに渡します。</source>
-        <translation>U+EE03 profile として Zenzai v3/v3.2 のプロンプトに渡します。</translation>
+        <source>U+EE03 profile として システムOne (Jev / Laya) のプロンプトに渡します。</source>
+        <translation>U+EE03 profile として システムOne (Jev / Laya) のプロンプトに渡します。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz profile</source>
-        <translation>Zenz プロファイル</translation>
+        <source>システムOne profile</source>
+        <translation>システムOne プロファイル</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -607,13 +607,13 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>U+EE04 topic として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</source>
-        <translation>U+EE04 topic として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</translation>
+        <source>U+EE04 topic として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</source>
+        <translation>U+EE04 topic として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz topic</source>
-        <translation>Zenz トピック</translation>
+        <source>システムOne topic</source>
+        <translation>システムOne トピック</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -627,13 +627,13 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>U+EE05 style として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</source>
-        <translation>U+EE05 style として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</translation>
+        <source>U+EE05 style として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</source>
+        <translation>U+EE05 style として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz style</source>
-        <translation>Zenz スタイル</translation>
+        <source>システムOne style</source>
+        <translation>システムOne スタイル</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -647,13 +647,13 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>U+EE06 settings として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</source>
-        <translation>U+EE06 settings として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</translation>
+        <source>U+EE06 settings として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</source>
+        <translation>U+EE06 settings として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz settings</source>
-        <translation>Zenz 設定</translation>
+        <source>システムOne settings</source>
+        <translation>システムOne 設定</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -667,23 +667,23 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>クライアントからカーソル右側テキストが渡された場合、U+EE07 right context として Zenzai v3.2 のプロンプトに含めます。</source>
-        <translation>クライアントからカーソル右側テキストが渡された場合、U+EE07 right context として Zenzai v3.2 のプロンプトに含めます。</translation>
+        <source>クライアントからカーソル右側テキストが渡された場合、U+EE07 right context として システムOne (Jev / Laya) のプロンプトに含めます。</source>
+        <translation>クライアントからカーソル右側テキストが渡された場合、U+EE07 right context として システムOne (Jev / Laya) のプロンプトに含めます。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 右文脈を使用する</source>
-        <translation>Zenz 右文脈を使用する</translation>
+        <source>システムOne 右文脈を使用する</source>
+        <translation>システムOne 右文脈を使用する</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 右文脈として使う最大文字数です。</source>
-        <translation>Zenz 右文脈として使う最大文字数です。</translation>
+        <source>システムOne 右文脈として使う最大文字数です。</source>
+        <translation>システムOne 右文脈として使う最大文字数です。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 右文脈長</source>
-        <translation>Zenz 右文脈長</translation>
+        <source>システムOne 右文脈長</source>
+        <translation>システムOne 右文脈長</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -697,28 +697,28 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 補正結果の採用/却下をローカルに保存し、次回以降の補正や候補順位に反映します。確定した内容は、通常の変換履歴にも反映される場合があります。</source>
-        <translation>Zenz 補正結果の採用/却下をローカルに保存し、次回以降の補正や候補順位に反映します。確定した内容は、通常の変換履歴にも反映される場合があります。</translation>
+        <source>システムOne 補正結果の採用/却下をローカルに保存し、次回以降の補正や候補順位に反映します。確定した内容は、通常の変換履歴にも反映される場合があります。</source>
+        <translation>システムOne 補正結果の採用/却下をローカルに保存し、次回以降の補正や候補順位に反映します。確定した内容は、通常の変換履歴にも反映される場合があります。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 補正結果をローカル学習する</source>
-        <translation>Zenz 補正結果をローカル学習する</translation>
+        <source>システムOne 補正結果をローカル学習する</source>
+        <translation>システムOne 補正結果をローカル学習する</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>同じ読み・同じ文脈クラス・同じ Zenz 補正について、拒否回数と拒否割合の両方が設定値以上になった場合に表示を抑制します。自動ブロック中も Zenz の内部生成と最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。通常の Mozc 候補から削除する機能ではありません。</source>
-        <translation>同じ読み・同じ文脈クラス・同じ Zenz 補正について、拒否回数と拒否割合の両方が設定値以上になった場合に表示を抑制します。自動ブロック中も Zenz の内部生成と最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。通常の Mozc 候補から削除する機能ではありません。</translation>
+        <source>同じ読み・同じ文脈クラス・同じ システムOne 補正について、拒否回数と拒否割合の両方が設定値以上になった場合に表示を抑制します。自動ブロック中も システムOne の内部生成と最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。通常の Mozc 候補から削除する機能ではありません。</source>
+        <translation>同じ読み・同じ文脈クラス・同じ システムOne 補正について、拒否回数と拒否割合の両方が設定値以上になった場合に表示を抑制します。自動ブロック中も システムOne の内部生成と最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。通常の Mozc 候補から削除する機能ではありません。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 補正と異なる結果で確定した場合、その補正を自動ブロックする</source>
-        <translation>Zenz 補正と異なる結果で確定した場合、その補正を自動ブロックする</translation>
+        <source>システムOne 補正と異なる結果で確定した場合、その補正を自動ブロックする</source>
+        <translation>システムOne 補正と異なる結果で確定した場合、その補正を自動ブロックする</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>自動ブロック判定に必要な最低拒否回数です。拒否割合の条件も同時に満たした場合だけ自動ブロックします。設定変更は既存の Zenz 学習データにも動的に反映されます。</source>
-        <translation>自動ブロック判定に必要な最低拒否回数です。拒否割合の条件も同時に満たした場合だけ自動ブロックします。設定変更は既存の Zenz 学習データにも動的に反映されます。</translation>
+        <source>自動ブロック判定に必要な最低拒否回数です。拒否割合の条件も同時に満たした場合だけ自動ブロックします。設定変更は既存の システムOne 学習データにも動的に反映されます。</source>
+        <translation>自動ブロック判定に必要な最低拒否回数です。拒否割合の条件も同時に満たした場合だけ自動ブロックします。設定変更は既存の システムOne 学習データにも動的に反映されます。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -757,13 +757,13 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>Zenz 学習データ</source>
-        <translation>Zenz 学習データ</translation>
+        <source>システムOne 学習データ</source>
+        <translation>システムOne 学習データ</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>保存された Zenz 学習データを確認、検索、インポート、エクスポート、削除します。通常の変換履歴に反映済みの学習は、この画面の削除対象には含まれません。</source>
-        <translation>保存された Zenz 学習データを確認、検索、インポート、エクスポート、削除します。通常の変換履歴に反映済みの学習は、この画面の削除対象には含まれません。</translation>
+        <source>保存された システムOne 学習データを確認、検索、インポート、エクスポート、削除します。通常の変換履歴に反映済みの学習は、この画面の削除対象には含まれません。</source>
+        <translation>保存された システムOne 学習データを確認、検索、インポート、エクスポート、削除します。通常の変換履歴に反映済みの学習は、この画面の削除対象には含まれません。</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -1117,8 +1117,8 @@
     </message>
     <message>
         <location filename="config_dialog.cc" line="718"/>
-        <source>This operation clears Mozc conversion learning, including learning reflected from accepted Zenz results. Input history data and Zenz learning data itself are not cleared. To remove input history data, use &quot;Suggestion&quot; -&gt; &quot;Clear all history&quot;. To manage Zenz learning data, use &quot;Advanced&quot; -&gt; &quot;Zenz Learning&quot;. Do you want to continue?</source>
-        <translation>Mozcの変換学習がリセットされます。Zenzの結果からMozcに反映された変換学習も対象です。入力履歴データとZenz学習データそのものはリセットされません。入力履歴データの削除は「サジェスト→全入力履歴を削除」、Zenz学習データの管理は「入力補助→Zenz 学習」から行えます。実行しますか？</translation>
+        <source>This operation clears Mozc conversion learning, including learning reflected from accepted システムOne results. Input history data and システムOne学習 data itself are not cleared. To remove input history data, use &quot;Suggestion&quot; -&gt; &quot;Clear all history&quot;. To manage システムOne学習 data, use &quot;Advanced&quot; -&gt; &quot;システムOne Learning&quot;. Do you want to continue?</source>
+        <translation>Mozcの変換学習がリセットされます。システムOneの結果からMozcに反映された変換学習も対象です。入力履歴データとシステムOne学習データそのものはリセットされません。入力履歴データの削除は「サジェスト→全入力履歴を削除」、システムOne学習データの管理は「入力補助→システムOne 学習」から行えます。実行しますか？</translation>
     </message>
     <message>
         <location filename="config_dialog.cc" line="776"/>
@@ -1591,8 +1591,8 @@ The current Windows default IME override will be saved so it can be restored lat
 
     <message>
         <location filename="config_dialog.cc" line="0"/>
-        <source>Zenz correction maximum wait must be at least 50 ms.</source>
-        <translation>Zenz 補正開始後の最大待機時間は 50 ms 以上にしてください。</translation>
+        <source>システムOne correction maximum wait must be at least 50 ms.</source>
+        <translation>システムOne 補正開始後の最大待機時間は 50 ms 以上にしてください。</translation>
     </message>
 </context>
 <context>

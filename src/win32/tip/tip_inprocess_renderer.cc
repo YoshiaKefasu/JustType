@@ -12,16 +12,42 @@
 #include <thread>
 
 #include "base/const.h"
+#include "base/system_util.h"
+#include "base/win32/wide_char.h"
 #include "client/client_interface.h"
 #include "protocol/commands.pb.h"
 #include "protocol/renderer_command.pb.h"
 #include "renderer/renderer_style_config.h"
 #include "renderer/win32/window_manager.h"
+#include "renderer/win32/win32_font_resource.h"
 
 namespace mozc {
 namespace win32 {
 namespace tsf {
 namespace {
+
+// Registers the bundled Gen Interface JP Display faces into this process.
+//
+// The candidate window the renderer draws here is created inside the host
+// application (Notepad++ and friends), so it is this process that has to know
+// the family: a face that is not registered here is looked up by the host's
+// font resolution, which falls back to whatever the application would have
+// used, and the window then renders in a different typeface from the one the
+// config dialog previews.  mozc_renderer.exe has done this at startup all
+// along; the in-process renderer is the same drawing code, so it needs the
+// same registration.
+//
+// FR_PRIVATE and per process, so calling it once is enough no matter how many
+// renderer threads the process has had.
+void RegisterBundledFontsForInProcessRenderer() {
+  static std::once_flag once;
+  std::call_once(once, [] {
+    const std::wstring fonts_directory =
+        mozc::renderer::win32::BundledFontsDirectory(
+            mozc::win32::Utf8ToWide(mozc::SystemUtil::GetServerDirectory()));
+    mozc::renderer::win32::RegisterBundledFonts(fonts_directory);
+  });
+}
 
 constexpr UINT kInProcessRendererUpdateMessage = WM_APP + 0x531;
 constexpr UINT kInProcessRendererShutdownMessage = WM_APP + 0x532;
@@ -144,6 +170,8 @@ class InProcessRendererWorker final {
   }
 
   void ThreadMain() {
+    RegisterBundledFontsForInProcessRenderer();
+
     // Force creation of this thread's message queue before publishing the
     // thread id. CandidateWindow instances created below then receive and
     // dispatch their mouse/window messages on this dedicated renderer thread,

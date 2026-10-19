@@ -305,7 +305,7 @@ class AsyncSessionCommandEditSessionImpl final
 
     // A delayed session command may produce another delayed callback.
     // Example:
-    //   APPLY_LIVE_CONVERSION -> output callback APPLY_ZENZ_LIVE_CORRECTION
+    //   APPLY_LIVE_CONVERSION -> output callback APPLY_SYSTEMONE_LIVE
     //
     // The normal key-event path handles this in OnOutputReceivedImpl(), but
     // this edit session is used by timer-fired callbacks and bypasses that

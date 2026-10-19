@@ -317,8 +317,11 @@ std::string UserProfileDirectoryImpl::GetUserProfileDirectory() const {
     if (absl::Status s = FileUtil::CreateDirectory(dir); !s.ok()) {
       LOG(ERROR) << s;
     }
-#endif  // GOOGLE_JAPANESE_INPUT_BUILD
     return FileUtil::JoinPath(dir, kProductNameInEnglish);
+#else   // GOOGLE_JAPANESE_INPUT_BUILD
+    return FileUtil::JoinPath(
+        dir, SystemUtil::ResolveUserProfileDirectoryName(dir));
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
 
 #elif defined(TARGET_OS_OSX) && TARGET_OS_OSX
     std::string dir = MacUtil::GetApplicationSupportDirectory();
@@ -376,6 +379,32 @@ std::string UserProfileDirectoryImpl::GetUserProfileDirectory() const {
 std::string SystemUtil::GetUserProfileDirectory() {
   return UserProfileDirectoryImpl::GetInstance()->GetDir();
 }
+
+#if defined(_WIN32)
+// Resolves the product directory name to use under the LocalLow directory.
+//
+// The product was renamed from Mozc to JustType.  Choosing the wrong directory
+// silently resets the user's settings, user dictionary, and learning data, so
+// the rule is deliberately explicit:
+//   1. An existing "JustType" directory always wins.
+//   2. Otherwise an existing "Mozc" directory is kept so that existing users
+//      keep their data across the rename.
+//   3. Otherwise this is a fresh install and "JustType" is created.
+std::string SystemUtil::ResolveUserProfileDirectoryName(
+    absl::string_view local_low_dir) {
+  const std::string just_type_dir =
+      FileUtil::JoinPath(local_low_dir, kUserProfileDirectoryName);
+  if (FileUtil::DirectoryExists(just_type_dir).ok()) {
+    return std::string(kUserProfileDirectoryName);
+  }
+  const std::string legacy_dir =
+      FileUtil::JoinPath(local_low_dir, kLegacyUserProfileDirectoryName);
+  if (FileUtil::DirectoryExists(legacy_dir).ok()) {
+    return std::string(kLegacyUserProfileDirectoryName);
+  }
+  return std::string(kUserProfileDirectoryName);
+}
+#endif  // _WIN32
 
 std::string SystemUtil::GetLoggingDirectory() {
 #ifdef __APPLE__

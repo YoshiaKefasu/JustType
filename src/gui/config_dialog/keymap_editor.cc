@@ -82,7 +82,7 @@ constexpr config::Config::SessionKeymap kKeyMaps[] = {
 
 constexpr absl::string_view kKeyMapStatus[] = {
     "DirectInput", "Precomposition", "Composition",
-    "Conversion", "LiveConversion", "ZenzConversion", "Suggestion",
+    "Conversion", "LiveConversion", "Suggestion",
     "Prediction",
 };
 

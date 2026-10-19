@@ -32,7 +32,7 @@ MAJOR = 3
 MINOR = 33
 
 # BUILD number used for the OSS version.
-BUILD_OSS = 6153
+BUILD_OSS = 6166
 
 # Number to be increased. This value may be replaced by other tools.
 BUILD = BUILD_OSS
@@ -40,7 +40,7 @@ BUILD = BUILD_OSS
 # Represent the platform and release channel.
 REVISION = 100
 
-# User-facing Mozkey release version.  This is shown in the About dialog and
+# User-facing JustType release version.  This is shown in the About dialog and
 # should match the GitHub release tag without the leading "v".
 MOZKEY_RELEASE_VERSION_MAJOR = 0
 MOZKEY_RELEASE_VERSION_MINOR = 7

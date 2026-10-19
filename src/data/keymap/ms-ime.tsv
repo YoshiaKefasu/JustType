@@ -153,10 +153,14 @@ Precomposition	OFF	IMEOff
 Precomposition	ON	IMEOn
 Precomposition	Shift Muhenkan	ToggleAlphanumericMode
 Precomposition	Shift Space	InsertAlternateSpace
-Precomposition	Space	ReconvertSelectionOrInsertSpace
+# Space always types a space.  It used to be ReconvertSelectionOrInsertSpace,
+# which asked the TSF client to reconvert the selected application text when
+# there was any.  Many clients expose the text an IME just committed as a
+# selection, so pressing Space right after Enter reconverted the last character
+# instead of typing a space and popped the candidate window open.
+Precomposition	Space	InsertSpace
 Conversion	Ctrl Delete	DeleteSelectedCandidate
 Prediction	Ctrl Delete	DeleteSelectedCandidate
 Suggestion	Down	PredictAndConvert
 Suggestion	Shift Enter	CommitFirstSuggestion
-ZenzConversion	Space	RevertZenzToMozc
 LiveConversion	Backspace	Backspace

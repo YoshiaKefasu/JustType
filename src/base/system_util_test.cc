@@ -31,6 +31,8 @@
 
 #include <string>
 
+#include "absl/strings/string_view.h"
+#include "base/const.h"
 #include "base/environ_mock.h"
 #include "base/file_util.h"
 #include "base/file_util_mock.h"
@@ -102,6 +104,37 @@ TEST_F(SystemUtilTest, GetUserProfileDirectory) {
 TEST_F(SystemUtilTest, GetTotalPhysicalMemoryTest) {
   EXPECT_GT(SystemUtil::GetTotalPhysicalMemory(), 0);
 }
+
+#ifdef _WIN32
+// The product was renamed from Mozc to JustType.  The user profile directory
+// must follow the existing directory so that an upgrade never resets the
+// user's settings, user dictionary, and learning data.
+TEST_F(SystemUtilTest, ResolveUserProfileDirectoryName) {
+  FileUtilMock file_util_mock;
+  constexpr absl::string_view kLocalLow = "C:\\Users\\mozcuser\\AppData\\LocalLow";
+  const std::string just_type_dir =
+      FileUtil::JoinPath(kLocalLow, kUserProfileDirectoryName);
+  const std::string legacy_dir =
+      FileUtil::JoinPath(kLocalLow, kLegacyUserProfileDirectoryName);
+
+  // A fresh install has neither directory and gets the new name.
+  EXPECT_FALSE(FileUtil::DirectoryExists(just_type_dir).ok());
+  EXPECT_FALSE(FileUtil::DirectoryExists(legacy_dir).ok());
+  EXPECT_EQ(SystemUtil::ResolveUserProfileDirectoryName(kLocalLow),
+            kUserProfileDirectoryName);
+
+  // An existing legacy directory is kept for backward compatibility.
+  EXPECT_OK(FileUtil::CreateDirectory(legacy_dir));
+  EXPECT_EQ(SystemUtil::ResolveUserProfileDirectoryName(kLocalLow),
+            kLegacyUserProfileDirectoryName);
+
+  // Once the new directory exists, it always wins so that a user who migrated
+  // is not dragged back to the legacy directory.
+  EXPECT_OK(FileUtil::CreateDirectory(just_type_dir));
+  EXPECT_EQ(SystemUtil::ResolveUserProfileDirectoryName(kLocalLow),
+            kUserProfileDirectoryName);
+}
+#endif  // _WIN32
 
 #ifdef __ANDROID__
 TEST_F(SystemUtilTest, GetOSVersionStringTestForAndroid) {

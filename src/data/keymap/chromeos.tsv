@@ -119,5 +119,4 @@ Conversion	Ctrl Delete	DeleteSelectedCandidate
 Prediction	Ctrl Delete	DeleteSelectedCandidate
 Suggestion	Down	PredictAndConvert
 Suggestion	Shift Enter	CommitFirstSuggestion
-ZenzConversion	Space	RevertZenzToMozc
 LiveConversion	Backspace	Backspace

@@ -59,6 +59,7 @@ mozc_win32_cc_prod_binary(
         "//win32/installer:__subpackages__",  # Scheuklappen: keep
     ],
     deps = [
+        ":win32_font_resource",
         ":win32_renderer_main_resources",
         ":win32_server",
         "//base/win32:scoped_com",
@@ -357,6 +358,28 @@ mozc_cc_library(
     hdrs = ["win32_font_util.h"],
     tags = MOZC_TAGS.WIN_ONLY,
     target_compatible_with = ["@platforms//os:windows"],
+)
+
+# Registration of the bundled Gen Interface JP Display faces.
+#
+# The MSI installs the two faces under <MozcDir>\fonts; this registers them into
+# the calling process with FR_PRIVATE so the family the candidate window asks
+# for resolves whether or not the user installed it system-wide.  Nothing is
+# written to the system font table, so an uninstall leaves nothing behind.
+mozc_cc_library(
+    name = "win32_font_resource",
+    srcs = ["win32_font_resource.cc"],
+    hdrs = ["win32_font_resource.h"],
+    tags = MOZC_TAGS.WIN_ONLY,
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = [
+        "//session:__pkg__",
+        "//win32/tip:__pkg__",
+    ],
+    deps = [
+        "//bazel/win32:gdi32",
+        "//bazel/win32:user32",
+    ],
 )
 
 mozc_cc_library(

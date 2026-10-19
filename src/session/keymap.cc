@@ -190,7 +190,6 @@ void KeyMapManager::Reset() {
   keymap_composition_.Clear();
   keymap_conversion_.Clear();
   keymap_live_conversion_.Clear();
-  keymap_zenz_conversion_.Clear();
   keymap_zero_query_suggestion_.Clear();
   keymap_suggestion_.Clear();
   keymap_prediction_.Clear();
@@ -376,21 +375,6 @@ bool KeyMapManager::AddCommand(const std::string& state_name,
     if (!IsKnownCommandNameForAnyState(command)) {
       return false;
     }
-    // Output::Callback carries only one SessionCommand. Starting Zenz and
-    // then continuing with Delay/another command would replace its async poll
-    // callback. Until callback chaining is explicitly supported, make manual
-    // Zenz correction a terminal command instead of silently losing results.
-    if ((command == "ForceZenzLiveCorrection" ||
-         command == "ForceZenzLiveCorrectionWithoutFeedback") &&
-        i + 1 != command_sequence.size()) {
-      return false;
-    }
-    // Switching the visible presentation to ordinary conversion is a
-    // stand-alone action. Do not silently discard later macro steps from
-    // SendKeyConversionState's special-case dispatch.
-    if (command == "RevertZenzToMozc" && command_sequence.size() != 1) {
-      return false;
-    }
   }
 
   commands::KeyEvent key_event;
@@ -451,17 +435,6 @@ bool KeyMapManager::AddCommand(const std::string& state_name,
     }
 
     keymap_live_conversion_.AddRule(key_event, command, command_sequence,
-                                    key_event_name);
-    return true;
-  }
-
-  if (state_name == "ZenzConversion") {
-    ConversionState::Commands command;
-    if (!ParseCommandConversion(first_command_name, &command)) {
-      return false;
-    }
-
-    keymap_zenz_conversion_.AddRule(key_event, command, command_sequence,
                                     key_event_name);
     return true;
   }
@@ -692,11 +665,6 @@ void KeyMapManager::InitCommandData() {
                                 PrecompositionState::PREDICT_AND_CONVERT);
 
   // Composition
-  RegisterCompositionCommand("ForceZenzLiveCorrection",
-                             CompositionState::FORCE_ZENZ_LIVE_CORRECTION);
-  RegisterCompositionCommand(
-      "ForceZenzLiveCorrectionWithoutFeedback",
-      CompositionState::FORCE_ZENZ_LIVE_CORRECTION_WITHOUT_FEEDBACK);
   RegisterCompositionCommand("IMEOff", CompositionState::IME_OFF);
   RegisterCompositionCommand("IMEOn", CompositionState::IME_ON);
   RegisterCompositionCommand("InsertCharacter",
@@ -787,13 +755,6 @@ void KeyMapManager::InitCommandData() {
   }
 
   // Conversion
-  RegisterConversionCommand("ForceZenzLiveCorrection",
-                            ConversionState::FORCE_ZENZ_LIVE_CORRECTION);
-  RegisterConversionCommand(
-      "ForceZenzLiveCorrectionWithoutFeedback",
-      ConversionState::FORCE_ZENZ_LIVE_CORRECTION_WITHOUT_FEEDBACK);
-  RegisterConversionCommand("RevertZenzToMozc",
-                            ConversionState::REVERT_ZENZ_TO_MOZC);
   RegisterConversionCommand("Backspace", ConversionState::BACKSPACE);
   RegisterConversionCommand("IMEOff", ConversionState::IME_OFF);
   RegisterConversionCommand("IMEOn", ConversionState::IME_ON);
@@ -1042,37 +1003,6 @@ bool KeyMapManager::GetCommandSequenceLiveConversion(
   if (keymap_live_conversion_.GetCommandSequence(key_event, commands)) {
     if (specialized_override != nullptr) {
       *specialized_override = true;
-    }
-    return true;
-  }
-  return keymap_conversion_.GetCommandSequence(key_event, commands);
-}
-
-bool KeyMapManager::GetCommandSequenceZenzLiveConversion(
-    const commands::KeyEvent& key_event, CommandSequence* commands,
-    bool* specialized_override) const {
-  if (specialized_override != nullptr) {
-    *specialized_override = false;
-  }
-  if (keymap_zenz_conversion_.GetCommandSequence(key_event, commands)) {
-    if (specialized_override != nullptr) {
-      *specialized_override = true;
-    }
-    return true;
-  }
-  return GetCommandSequenceLiveConversion(key_event, commands,
-                                          specialized_override);
-}
-
-bool KeyMapManager::GetCommandSequenceZenzConversion(
-    const commands::KeyEvent& key_event, CommandSequence* commands,
-    bool* zenz_override) const {
-  if (zenz_override != nullptr) {
-    *zenz_override = false;
-  }
-  if (keymap_zenz_conversion_.GetCommandSequence(key_event, commands)) {
-    if (zenz_override != nullptr) {
-      *zenz_override = true;
     }
     return true;
   }

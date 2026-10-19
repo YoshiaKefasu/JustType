@@ -104,8 +104,6 @@ struct PrecompositionState {
 struct CompositionState {
   enum Commands {
     NONE = 0,
-    FORCE_ZENZ_LIVE_CORRECTION,
-    FORCE_ZENZ_LIVE_CORRECTION_WITHOUT_FEEDBACK,
     IME_OFF,
     IME_ON,
     INSERT_CHARACTER,
@@ -156,9 +154,6 @@ struct CompositionState {
 struct ConversionState {
   enum Commands {
     NONE = 0,
-    FORCE_ZENZ_LIVE_CORRECTION,
-    FORCE_ZENZ_LIVE_CORRECTION_WITHOUT_FEEDBACK,
-    REVERT_ZENZ_TO_MOZC,  // Restore the underlying ordinary conversion.
     BACKSPACE,  // Edit the underlying reading, not the rendered surface.
     IME_OFF,
     IME_ON,
@@ -303,18 +298,10 @@ class KeyMapManager {
   bool GetCommandSequenceConversion(const commands::KeyEvent& key_event,
                                     CommandSequence* commands) const;
 
-  // Applies only while a Zenz correction is visibly presented. Unbound keys
-  // inherit the ordinary Conversion rule, preserving existing user keymaps.
-  // Live mode and Zenz presentation are separate axes.  An absent specialized
-  // binding inherits Conversion; |specialized_override| records whether a
-  // LiveConversion or ZenzConversion row actually supplied the command.
+  // Live mode and the ordinary Conversion rule are separate axes.  An absent
+  // specialized binding inherits Conversion; |specialized_override| records
+  // whether a LiveConversion row actually supplied the command.
   bool GetCommandSequenceLiveConversion(
-      const commands::KeyEvent& key_event, CommandSequence* commands,
-      bool* specialized_override = nullptr) const;
-  bool GetCommandSequenceZenzConversion(const commands::KeyEvent& key_event,
-                                        CommandSequence* commands,
-                                        bool* zenz_override = nullptr) const;
-  bool GetCommandSequenceZenzLiveConversion(
       const commands::KeyEvent& key_event, CommandSequence* commands,
       bool* specialized_override = nullptr) const;
 
@@ -447,10 +434,6 @@ class KeyMapManager {
   KeyMap<CompositionState> keymap_composition_;
   KeyMap<ConversionState> keymap_conversion_;
   KeyMap<ConversionState> keymap_live_conversion_;
-
-  // While Zenz correction is visible, prefer this optional keymap.
-  // Otherwise fall back to keymap_conversion_.
-  KeyMap<ConversionState> keymap_zenz_conversion_;
 
   // enabled only if zero query suggestion is shown. Otherwise, inherit from
   // keymap_precomposition

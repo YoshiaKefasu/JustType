@@ -448,7 +448,7 @@
             <item row="2" column="0" colspan="2">
              <widget class="QLabel" name="zenzLearningIndependenceNoticeLabel">
               <property name="text">
-               <string>Configure and manage Zenz learning under [Advanced] -&gt; [Zenz Learning].</string>
+               <string>Configure and manage システムOne学習 under [Advanced] -&gt; [システムOne学習].</string>
               </property>
               <property name="wordWrap">
                <bool>true</bool>
@@ -1035,7 +1035,7 @@
                    <item>
                     <widget class="QLabel" name="zenzLiveCorrectionSectionLabel">
                      <property name="text">
-                      <string>Zenz ライブ補正</string>
+                      <string>システムOne 判断型補正</string>
                      </property>
                     </widget>
                    </item>
@@ -1076,10 +1076,10 @@
                    <item>
                     <widget class="QCheckBox" name="zenzConditionFieldsVisibleCheckBox">
                      <property name="toolTip">
-                      <string>Zenzai v3/v3.2 のプロンプト条件フィールドの表示を切り替えます。折りたたんでも設定値は保持され、Zenzai v3/v3.2 を使用中は送信内容は変わりません。</string>
+                      <string>システムOne (Jev / Laya) のプロンプト条件フィールドの表示を切り替えます。折りたたんでも設定値は保持され、システムOne (Jev / Laya) を使用中は送信内容は変わりません。</string>
                      </property>
                      <property name="text">
-                      <string>Zenz 条件フィールド (Zenzai v3/v3.2)</string>
+                      <string>システムOne 判断型条件フィールド</string>
                      </property>
                     </widget>
                    </item>
@@ -1120,7 +1120,7 @@
                    <item>
                     <widget class="QLabel" name="zenzFeedbackLearningSectionLabel">
                      <property name="text">
-                      <string>Zenz 学習（Mozc変換履歴）</string>
+                      <string>システムOne学習（Mozc変換履歴）</string>
                      </property>
                     </widget>
                    </item>
@@ -1535,27 +1535,27 @@
                 <item row="16" column="0" colspan="8">
                  <widget class="QCheckBox" name="zenzLiveCorrectionCheckBox">
                   <property name="toolTip">
-                   <string>ライブ変換結果に対して、ローカルの Zenz モデルで文脈補正を行います。</string>
+                   <string>ライブ変換結果に対して、ローカルの システムOne モデルで文脈補正を行います。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz ライブ補正を有効にする</string>
+                   <string>システムOne 判断型補正を有効にする</string>
                   </property>
                  </widget>
                 </item>
                 <item row="17" column="0" colspan="3">
                  <widget class="QLabel" name="zenzLiveCorrectionDelayLabel">
                   <property name="toolTip">
-                   <string>ライブ変換後、Zenz 補正を開始するまでの待ち時間です。</string>
+                   <string>ライブ変換後、システムOne 補正を開始するまでの待ち時間です。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz 補正開始の遅延</string>
+                   <string>システムOne 補正開始の遅延</string>
                   </property>
                  </widget>
                 </item>
                 <item row="17" column="3" colspan="5">
                  <widget class="QSpinBox" name="zenzLiveCorrectionDelaySpinBox">
                   <property name="toolTip">
-                   <string>ライブ変換後、Zenz 補正を開始するまでの待ち時間です。0 ms にすると即時補正します。</string>
+                   <string>ライブ変換後、システムOne 補正を開始するまでの待ち時間です。0 ms にすると即時補正します。</string>
                   </property>
                   <property name="minimum">
                    <number>0</number>
@@ -1580,17 +1580,17 @@
                 <item row="18" column="0" colspan="3">
                  <widget class="QLabel" name="zenzLiveCorrectionMinKeyLengthLabel">
                   <property name="toolTip">
-                   <string>Zenz 補正を開始する最小文字数です。短くすると補正機会は増えますが、誤補正も増える可能性があります。</string>
+                   <string>システムOne 補正を開始する最小文字数です。短くすると補正機会は増えますが、誤補正も増える可能性があります。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz 補正開始の最小文字数</string>
+                   <string>システムOne 補正開始の最小文字数</string>
                   </property>
                  </widget>
                 </item>
                 <item row="18" column="3" colspan="5">
                  <widget class="QSpinBox" name="zenzLiveCorrectionMinKeyLengthSpinBox">
                   <property name="toolTip">
-                   <string>Zenz 補正を開始する最小文字数です。</string>
+                   <string>システムOne 補正を開始する最小文字数です。</string>
                   </property>
                   <property name="minimum">
                    <number>2</number>
@@ -1612,27 +1612,27 @@
                 <item row="19" column="0" colspan="8">
                  <widget class="QCheckBox" name="zenzDeferLiveConversionDisplayCheckBox">
                   <property name="toolTip">
-                   <string>Zenz 補正が実行される場合、補正結果が確定するまで通常の Mozc ライブ変換結果を表示しません。Zenz が採用されなかった場合は Mozc 結果を表示します。</string>
+                   <string>システムOne 補正が実行される場合、補正結果が確定するまで通常の Mozc ライブ変換結果を表示しません。システムOne が採用されなかった場合は Mozc 結果を表示します。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz 補正結果が返るまで通常のライブ変換結果を表示しない</string>
+                   <string>システムOne 補正結果が返るまで通常のライブ変換結果を表示しない</string>
                   </property>
                  </widget>
                 </item>
                 <item row="20" column="0" colspan="3">
                  <widget class="QLabel" name="zenzDeferredPresentationTimeoutLabel">
                   <property name="toolTip">
-                   <string>「通常のライブ変換結果を表示しない」が有効な場合、Zenz 補正要求の送信後、この時間以内に結果が返らなければ、その回の Zenz 補正を中止して通常の Mozc ライブ変換結果を表示します。</string>
+                   <string>「通常のライブ変換結果を表示しない」が有効な場合、システムOne 補正要求の送信後、この時間以内に結果が返らなければ、その回の システムOne 補正を中止して通常の Mozc ライブ変換結果を表示します。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz 補正開始後の最大待機時間</string>
+                   <string>システムOne 補正開始後の最大待機時間</string>
                   </property>
                  </widget>
                 </item>
                 <item row="20" column="3" colspan="5">
                  <widget class="QSpinBox" name="zenzDeferredPresentationTimeoutSpinBox">
                   <property name="toolTip">
-                   <string>「通常のライブ変換結果を表示しない」が有効な場合、Zenz 補正要求の送信後、この時間以内に結果が返らなければ、その回の Zenz 補正を中止して通常の Mozc ライブ変換結果を表示します。</string>
+                   <string>「通常のライブ変換結果を表示しない」が有効な場合、システムOne 補正要求の送信後、この時間以内に結果が返らなければ、その回の システムOne 補正を中止して通常の Mozc ライブ変換結果を表示します。</string>
                   </property>
                   <property name="minimum">
                    <number>50</number>
@@ -1654,10 +1654,10 @@
                 <item row="22" column="0" colspan="3">
                  <widget class="QLabel" name="zenzLiveCorrectionProfileLabel">
                   <property name="toolTip">
-                   <string>U+EE03 profile として Zenzai v3/v3.2 のプロンプトに渡します。</string>
+                   <string>U+EE03 profile として システムOne (Jev / Laya) のプロンプトに渡します。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz profile</string>
+                   <string>システムOne profile</string>
                   </property>
                  </widget>
                 </item>
@@ -1677,10 +1677,10 @@
                 <item row="23" column="0" colspan="3">
                  <widget class="QLabel" name="zenzLiveCorrectionTopicLabel">
                   <property name="toolTip">
-                   <string>U+EE04 topic として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</string>
+                   <string>U+EE04 topic として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz topic</string>
+                   <string>システムOne topic</string>
                   </property>
                  </widget>
                 </item>
@@ -1700,10 +1700,10 @@
                 <item row="24" column="0" colspan="3">
                  <widget class="QLabel" name="zenzLiveCorrectionStyleLabel">
                   <property name="toolTip">
-                   <string>U+EE05 style として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</string>
+                   <string>U+EE05 style として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz style</string>
+                   <string>システムOne style</string>
                   </property>
                  </widget>
                 </item>
@@ -1723,10 +1723,10 @@
                 <item row="25" column="0" colspan="3">
                  <widget class="QLabel" name="zenzLiveCorrectionSettingsLabel">
                   <property name="toolTip">
-                   <string>U+EE06 settings として Zenzai v3/v3.2 のプロンプトに渡します。experimental です。</string>
+                   <string>U+EE06 settings として システムOne (Jev / Laya) のプロンプトに渡します。experimental です。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz settings</string>
+                   <string>システムOne settings</string>
                   </property>
                  </widget>
                 </item>
@@ -1746,20 +1746,20 @@
                 <item row="26" column="0" colspan="8">
                  <widget class="QCheckBox" name="zenzLiveCorrectionRightContextCheckBox">
                   <property name="toolTip">
-                   <string>クライアントからカーソル右側テキストが渡された場合、U+EE07 right context として Zenzai v3.2 のプロンプトに含めます。</string>
+                   <string>クライアントからカーソル右側テキストが渡された場合、U+EE07 right context として システムOne (Jev / Laya) のプロンプトに含めます。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz 右文脈を使用する</string>
+                   <string>システムOne 右文脈を使用する</string>
                   </property>
                  </widget>
                 </item>
                 <item row="27" column="0" colspan="3">
                  <widget class="QLabel" name="zenzLiveCorrectionRightContextLengthLabel">
                   <property name="toolTip">
-                   <string>Zenz 右文脈として使う最大文字数です。</string>
+                   <string>システムOne 右文脈として使う最大文字数です。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz 右文脈長</string>
+                   <string>システムOne 右文脈長</string>
                   </property>
                  </widget>
                 </item>
@@ -1791,10 +1791,10 @@
                 <item row="29" column="0" colspan="8">
                  <widget class="QCheckBox" name="zenzMozcHistoryLearningCheckBox">
                   <property name="toolTip">
-                   <string>Zenz 補正を明示的に確定した場合、Mozc の通常変換履歴へ追加学習します。Zenz feedback の記録設定とは独立しています。Mozc 履歴学習が読み取り専用・無効の場合や、シークレット・保護入力では書き込みません。</string>
+                   <string>システムOne 補正を明示的に確定した場合、Mozc の通常変換履歴へ追加学習します。システムOne feedback の記録設定とは独立しています。Mozc 履歴学習が読み取り専用・無効の場合や、シークレット・保護入力では書き込みません。</string>
                   </property>
                   <property name="text">
-                   <string>確定した Zenz 補正を Mozc の変換履歴に追加学習する</string>
+                   <string>確定した システムOne 補正を Mozc の変換履歴に追加学習する</string>
                   </property>
                  </widget>
                 </item>
@@ -1808,8 +1808,8 @@
                    <property name="bottomMargin"><number>6</number></property>
                    <item>
                     <widget class="QLabel" name="zenzFeedbackLearningSubsectionLabel">
-                     <property name="text"><string>Zenz 学習（補正フィードバック）</string></property>
-                     <property name="toolTip"><string>Zenz 補正の採用・却下を記録し、保存済みの評価を候補順位や自動ブロックの判定に利用します。Mozc の通常変換履歴とは別に管理されます。</string></property>
+                     <property name="text"><string>システムOne学習（補正フィードバック）</string></property>
+                     <property name="toolTip"><string>システムOne 補正の採用・却下を記録し、保存済みの評価を候補順位や自動ブロックの判定に利用します。Mozc の通常変換履歴とは別に管理されます。</string></property>
                     </widget>
                    </item>
                    <item>
@@ -1828,10 +1828,10 @@
                 <item row="31" column="0" colspan="8">
                  <widget class="QCheckBox" name="zenzFeedbackRecordingCheckBox">
                   <property name="toolTip">
-                   <string>Zenz 補正の採用・却下をローカルの feedback データに記録します。保存済みデータを変換へ自動適用するかどうか、および Mozc 履歴へ追加学習するかどうかとは独立しています。</string>
+                   <string>システムOne 補正の採用・却下をローカルの feedback データに記録します。保存済みデータを変換へ自動適用するかどうか、および Mozc 履歴へ追加学習するかどうかとは独立しています。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz 補正の採用・却下を記録する</string>
+                   <string>システムOne 補正の採用・却下を記録する</string>
                   </property>
                  </widget>
                 </item>
@@ -1848,10 +1848,10 @@
                 <item row="33" column="0" colspan="8">
                  <widget class="QCheckBox" name="zenzFeedbackAutoBlockCheckBox">
                   <property name="toolTip">
-                   <string>同じ読み・同じ文脈クラス・同じ Zenz 補正について、拒否回数と拒否割合の両方が設定値以上になった場合に表示を抑制します。自動ブロック中も Zenz の内部生成と最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。通常の Mozc 候補から削除する機能ではありません。</string>
+                   <string>同じ読み・同じ文脈クラス・同じ システムOne 補正について、拒否回数と拒否割合の両方が設定値以上になった場合に表示を抑制します。自動ブロック中も システムOne の内部生成と最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。通常の Mozc 候補から削除する機能ではありません。</string>
                   </property>
                   <property name="text">
-                   <string>Zenz 補正と異なる結果で確定した場合、その補正を自動ブロックする</string>
+                   <string>システムOne 補正と異なる結果で確定した場合、その補正を自動ブロックする</string>
                   </property>
                  </widget>
                 </item>
@@ -1921,7 +1921,7 @@
                 </item>
                 <item row="36" column="0" colspan="8">
                  <widget class="QCheckBox" name="zenzFeedbackMinKeyLengthCheckBox">
-                  <property name="text"><string>短い読みでは Zenz feedback を自動適用しない</string></property>
+                  <property name="text"><string>短い読みでは システムOne feedback を自動適用しない</string></property>
                   <property name="toolTip"><string>読み全体が設定文字数未満の場合、採用・却下は記録しますが、候補順位の補正・保存済み補正の再利用・自動ブロックを行いません。明示的な手動ブロックは有効です。</string></property>
                  </widget>
                 </item>
@@ -1948,7 +1948,7 @@
                 <item row="38" column="3" colspan="5">
                  <widget class="QPushButton" name="editZenzFeedbackButton">
                   <property name="toolTip">
-                   <string>Zenz 補正の採用・却下・手動ブロックの履歴を確認、検索、インポート、エクスポート、削除します。Mozc の通常変換履歴に追加学習した内容は管理対象外です。</string>
+                   <string>システムOne 補正の採用・却下・手動ブロックの履歴を確認、検索、インポート、エクスポート、削除します。Mozc の通常変換履歴に追加学習した内容は管理対象外です。</string>
                   </property>
                   <property name="text">
                    <string>管理...</string>
@@ -1966,7 +1966,7 @@
                    <item>
                     <widget class="QLabel" name="systemoneSectionLabel">
                      <property name="text"><string>システムOne (Jev / Laya) 判断型変換</string></property>
-                     <property name="toolTip"><string>文章を生成せず、状態を読んで選択肢から1つを選ぶ判断型モデルです。生成型の Zenz パイプラインを置き換える場合に使います。</string></property>
+                     <property name="toolTip"><string>文章を生成せず、状態を読んで選択肢から1つを選ぶ判断型モデルです。生成型の システムOne パイプラインを置き換える場合に使います。</string></property>
                     </widget>
                    </item>
                    <item>
@@ -2476,7 +2476,7 @@
                    <item row="13" column="0" colspan="3">
                     <widget class="QLabel" name="zenzPreeditColorLabel">
                      <property name="text">
-                      <string>Zenz 補正中の文字</string>
+                      <string>システムOne 補正中の文字</string>
                      </property>
                     </widget>
                    </item>
@@ -3038,7 +3038,7 @@
                </sizepolicy>
               </property>
               <property name="text">
-               <string>Temporarily disable conversion personalization (including Zenz learning), history-based suggestions and user dictionary</string>
+               <string>Temporarily disable conversion personalization (including システムOne学習), history-based suggestions and user dictionary</string>
               </property>
               <property name="wordWrap">
                <bool>true</bool>

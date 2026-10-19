@@ -52,7 +52,10 @@ filegroup(
         "toggle_flick-hiragana_intuitive.tsv",
         "toggle_flick-number.tsv",
     ],
-    visibility = ["//base:__pkg__"],
+    visibility = [
+        "//base:__pkg__",
+        "//session:__pkg__",
+    ],
 )
 
 exports_files(glob(["*.tsv"]))

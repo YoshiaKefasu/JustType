@@ -56,7 +56,7 @@
     http://msdn.microsoft.com/en-us/library/aa367850.aspx.
     So we change the product ID for every new version.
   -->
-  <Package Name="Google 日本語入力" Language="1041" Codepage="932" Version="$(var.MozcVersion)" Manufacturer="Google LLC" UpgradeCode="$(var.UpgradeCode)" InstallerVersion="500">
+  <Package Name="Google 日本語入力" Language="1041" Codepage="932" Version="$(var.MozcVersion)" Manufacturer="Google LLC" UpgradeCode="$(var.UpgradeCode)" InstallerVersion="500" Scope="perMachine">
     <SummaryInformation Keywords="Installer" Description="Google 日本語入力 インストーラー" Manufacturer="Google LLC" Codepage="932" />
 
     <!--
@@ -124,6 +124,11 @@
     <!-- Disable Modify and Repair buttons. -->
     <Property Id="ARPNOMODIFY" Value="1" />
     <Property Id="ARPNOREPAIR" Value="1" />
+    <!-- Never prompt for a reboot. The TIP registration and the firewall rules
+         are both applied per machine and take effect without a restart, and an
+         IME installer that reboots the machine loses whatever the user was
+         typing in other applications. -->
+    <Property Id="REBOOT" Value="ReallySuppress" />
 
     <!--
       A fail-fast mechanism against channel mismatch.  Currently we focus on
@@ -188,6 +193,9 @@
       <ComponentRef Id="SysProcs" />
       <ComponentRef Id="PrelaunchProcesses" />
       <ComponentRef Id="CreditsEn" />
+
+      <ComponentRef Id="FontGenInterfaceJpDisplayRegular" />
+      <ComponentRef Id="FontGenInterfaceJpDisplayBold" />
     </Feature>
 
     <Binary Id="GoogleIMEJaInstallerHelper.dll" SourceFile="$(var.CustomActions64Path)" />
@@ -234,16 +242,18 @@
       <Custom Action="ShutdownServer" Before="InstallValidate" />
       <Custom Action="NewerVersionError" After="FindRelatedProducts" Condition="NEWERVERSIONDETECTED" />
       <!--
-        RemoveExistingProducts needs to be scheduled between InstallExecute and
-        InstallFinalize to correctly deal with errors which occur when the old
-        product is removed on upgrade.
+        RemoveExistingProducts is scheduled right after InstallInitialize so
+        that the previous product is fully uninstalled before any of the new
+        files are written.  A late REP (between InstallExecute and
+        InstallFinalize) lets Windows Installer keep an already-installed file
+        whenever it considers the version/hash equivalent, which left stale
+        binaries in place after an upgrade.
         http://msdn.microsoft.com/en-us/library/aa371197(VS.85).aspx
       -->
-      <InstallExecute Before="RemoveExistingProducts" />
-      <RemoveExistingProducts Before="StopCacheServiceForRollback" />
+      <RemoveExistingProducts After="InstallInitialize" />
       <!--
         When the installer enters rollback mode, the cache service should be
-        stopped before RemoveExistingProducts is invoked.
+        stopped before the remaining install actions run.
       -->
       <Custom Action="StopCacheServiceForRollback" Before="RestoreServiceState" Condition="(NOT (REMOVE=&quot;ALL&quot;))" />
       <Custom Action="RestoreServiceState" Before="RegisterTIPRollback64" Condition="(NOT (REMOVE=&quot;ALL&quot;))" />
@@ -260,7 +270,7 @@
       <Custom Action="EnableTipProfile" Before="InstallFinalize" Condition="(NOT (REMOVE=&quot;ALL&quot;)) AND (NOT UPGRADING)" />
       <!-- show reboot dialog to execute pending file opartions -->
       <?if ($(var.VSConfigurationName) = "Release") ?>
-        <ScheduleReboot After="InstallFinalize" Condition="(REMOVE=&quot;ALL&quot;)" />
+        <ScheduleReboot After="InstallFinalize" Condition="(REMOVE=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE)" />
       <?endif?>
     </InstallExecuteSequence>
 
@@ -366,6 +376,22 @@
               <File Id="$(var.QtWidgetsdFilename)" Name="$(var.QtWidgetsdFilename)" DiskId="1" Vital="yes" Checksum="yes" Source="$(var.QtDir)/bin/$(var.QtWidgetsdFilename)" />
             </Component>
           <?endif?>
+          <!--
+            Gen Interface JP Display faces.  Installed as <MozcDir>\fonts, the
+            directory BundledFontsDirectory() derives from the server binary's
+            own location; the renderer (AddFontResourceExW, FR_PRIVATE) and the
+            config dialog (QFontDatabase::addApplicationFont) register them per
+            process.  Plain files, not WiX <Font> entries: nothing is written to
+            the system font table, so an uninstall leaves nothing behind.
+          -->
+          <Directory Id="FontsDir" Name="fonts">
+            <Component Id="FontGenInterfaceJpDisplayRegular">
+              <File Id="GenInterfaceJpDisplayRegular.ttf" Name="GenInterfaceJPDisplay-Regular.ttf" DiskId="1" Source="$(var.GenInterfaceJpDisplayRegularPath)" Vital="yes" KeyPath="yes" />
+            </Component>
+            <Component Id="FontGenInterfaceJpDisplayBold">
+              <File Id="GenInterfaceJpDisplayBold.ttf" Name="GenInterfaceJPDisplay-Bold.ttf" DiskId="1" Source="$(var.GenInterfaceJpDisplayBoldPath)" Vital="yes" KeyPath="yes" />
+            </Component>
+          </Directory>
           <Directory Id="DocumentsDir" Name="documents">
             <Component Id="CreditsEn">
               <File Id="credits_en.html" Name="credits_en.html" DiskId="1" Checksum="yes" Vital="yes" Source="$(var.DocumentsDir)/credits_en.html" />

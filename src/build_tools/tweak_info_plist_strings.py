@@ -83,10 +83,10 @@ def main():
         }
   else:
     variables = {
-        'CF_BUNDLE_NAME_EN': 'Mozkey',
-        'CF_BUNDLE_NAME_JA': 'Mozkey',
+        'CF_BUNDLE_NAME_EN': 'JustType',
+        'CF_BUNDLE_NAME_JA': 'JustType',
         'NS_HUMAN_READABLE_COPYRIGHT': copyright_message,
-        'INPUT_MODE_ANNOTATION': 'Mozkey',
+        'INPUT_MODE_ANNOTATION': 'JustType',
         }
 
   codecs.open(options.output, 'w', encoding='utf-8').write(

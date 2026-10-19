@@ -47,7 +47,10 @@ inline constexpr char kSystemOneDefaultEndpointUrl[] =
 inline constexpr char kSystemOneDefaultModelName[] = "jev-1.13-free";
 inline constexpr char kSystemOneDefaultSessionId[] =
     "ses_019a00000000AbCdEfGhIjKlMn";
-inline constexpr uint32_t kSystemOneDefaultTimeoutMsec = 2500;
+// Per-request budget in milliseconds.  Mirrors config.systemone_timeout_msec
+// and has to stay small for the same reason: the request runs inline on the
+// key-event path, so this is a ceiling on how long typing can be delayed.
+inline constexpr uint32_t kSystemOneDefaultTimeoutMsec = 500;
 
 // Instruction text the endpoint documents for the choice question.  Kept in
 // sync with tools/mozkey-jev-bridge/internal/bridge.DefaultInstructions so

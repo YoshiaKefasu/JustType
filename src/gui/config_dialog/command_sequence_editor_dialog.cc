@@ -137,28 +137,13 @@ CommandSequenceEditorDialog::CommandSequenceEditorDialog(
     for (int i = 0; i < sequence_list_->count(); ++i) {
       const QString raw =
           sequence_list_->item(i)->data(kRawCommandRole).toString();
-      if (raw == QStringLiteral("RevertZenzToMozc") &&
-          sequence_list_->count() != 1) {
+      if (i == 0 && raw.startsWith(QStringLiteral("Delay("))) {
         QMessageBox::warning(
             this,
             QCoreApplication::translate("mozc::gui::KeyMapEditorDialog",
                                         "Invalid command sequence"),
-            QCoreApplication::translate(
-                "mozc::gui::KeyMapEditorDialog",
-                "Return to Mozc conversion must be used alone."));
-        return;
-      }
-      if ((i == 0 && raw.startsWith(QStringLiteral("Delay("))) ||
-          (i + 1 < sequence_list_->count() &&
-           (raw == QStringLiteral("ForceZenzLiveCorrection") ||
-            raw == QStringLiteral("ForceZenzLiveCorrectionWithoutFeedback")))) {
-        QMessageBox::warning(
-            this,
             QCoreApplication::translate("mozc::gui::KeyMapEditorDialog",
-                                        "Invalid command sequence"),
-            QCoreApplication::translate(
-                "mozc::gui::KeyMapEditorDialog",
-                "Delay cannot be first; manual Zenz correction must be last."));
+                                        "Delay cannot be first."));
         return;
       }
     }

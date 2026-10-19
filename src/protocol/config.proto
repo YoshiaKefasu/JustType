@@ -466,10 +466,16 @@ message Config {
   // Per-request budget in milliseconds. A decision that misses this deadline is
   // abandoned and the already-computed Mozc result is kept, so this value is a
   // latency ceiling rather than a retry window.
-  optional uint32 systemone_timeout_msec = 1054 [default = 2500];
+  //
+  // The ceiling also has to stay below the point where a keystroke feels stuck:
+  // the request runs inline on the key-event path, so a dead endpoint would
+  // otherwise block typing for the full budget on every key.
+  optional uint32 systemone_timeout_msec = 1054 [default = 500];
 
   // Emits request/response, chosen candidate, and error detail for SystemOne.
-  optional bool systemone_debug_logging = 1055 [default = true];
+  // Off by default: the log records the state string, i.e. what the user typed,
+  // so writing it has to be something the user turns on deliberately.
+  optional bool systemone_debug_logging = 1055 [default = false];
 
   //////////////////////////////////////////////////////////////
   //
@@ -636,8 +642,10 @@ message Config {
   optional uint32 preedit_target_underline_color = 133 [default = 0x0066ff];
 
   // Font family name for candidate and ruby windows on Windows.
-  // Empty string means the platform/default font.
-  optional string candidate_ruby_font_name = 134 [default = ""];
+  // Gen Interface JP Display is the product's display face, so it is the default
+  // rather than the platform font. Empty string still means platform/default.
+  optional string candidate_ruby_font_name = 134
+      [default = "Gen Interface JP Display"];
 
   // Show ruby window during live conversion on Windows.
   optional bool show_live_conversion_ruby_window = 135 [default = true];

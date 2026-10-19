@@ -83,3 +83,10 @@ dist/
 /tools/mozkey-jev-bridge/mozkey-jev-bridge.exe
 /tools/mozkey-jev-bridge/znzclient.exe
 /tools/mozkey-jev-bridge/jev_dataset.jsonl
+
+# Temporary scratch and build logs
+/A/
+/*.bat
+/*.log
+nul
+/src/session/probe_scratch.cc

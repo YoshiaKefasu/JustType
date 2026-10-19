@@ -30,85 +30,56 @@ std::wstring JoinPath(const std::wstring& lhs, const std::wstring& rhs) {
   return lhs + L"\\" + rhs;
 }
 
-bool EnsureDirectory(const std::wstring& path) {
-  if (::CreateDirectoryW(path.c_str(), nullptr)) {
-    return true;
-  }
-  return ::GetLastError() == ERROR_ALREADY_EXISTS;
-}
-
+// Pins the profile directory through SystemUtil instead of relying on the
+// LocalLow layout.  The product directory name is now resolved dynamically
+// (JustType for a fresh install, Mozc for a pre-rename one), so a test that
+// hard-coded LocalLow\Mozc would silently stop covering the store.
 class ScopedUserProfileForZenzFeedbackStoreTest {
  public:
-  ScopedUserProfileForZenzFeedbackStoreTest() {
-    wchar_t old_profile[32767] = {};
-    const DWORD old_len =
-        ::GetEnvironmentVariableW(L"USERPROFILE", old_profile, 32767);
-    if (old_len > 0 && old_len < 32767) {
-      has_old_profile_ = true;
-      old_profile_.assign(old_profile, old_len);
-    }
-
-    wchar_t temp_path[MAX_PATH] = {};
-    const DWORD temp_len = ::GetTempPathW(MAX_PATH, temp_path);
-    if (temp_len == 0 || temp_len >= MAX_PATH) {
+  ScopedUserProfileForZenzFeedbackStoreTest()
+      : old_profile_dir_(SystemUtil::GetUserProfileDirectory()),
+        profile_dir_(mozc::testing::MakeTempDirectoryOrDie()) {
+    if (profile_dir_.path().empty()) {
       return;
     }
-
-    profile_dir_ =
-        std::wstring(temp_path, temp_len) +
-        L"mozc_zenz_feedback_store_test_" +
-        std::to_wstring(::GetCurrentProcessId()) + L"_" +
-        std::to_wstring(::GetTickCount64());
-
-    const std::wstring app_data_dir = JoinPath(profile_dir_, L"AppData");
-    const std::wstring local_low_dir = JoinPath(app_data_dir, L"LocalLow");
-
-    if (!EnsureDirectory(profile_dir_) ||
-        !EnsureDirectory(app_data_dir) ||
-        !EnsureDirectory(local_low_dir)) {
-      return;
-    }
-
-    ok_ = ::SetEnvironmentVariableW(L"USERPROFILE", profile_dir_.c_str());
+    SystemUtil::SetUserProfileDirectory(profile_dir_.path());
+    ok_ = true;
   }
 
   ~ScopedUserProfileForZenzFeedbackStoreTest() {
-    if (has_old_profile_) {
-      ::SetEnvironmentVariableW(L"USERPROFILE", old_profile_.c_str());
-    } else {
-      ::SetEnvironmentVariableW(L"USERPROFILE", nullptr);
-    }
-
-    const std::wstring app_data_dir = JoinPath(profile_dir_, L"AppData");
-    const std::wstring local_low_dir = JoinPath(app_data_dir, L"LocalLow");
-    const std::wstring mozc_dir = JoinPath(local_low_dir, L"Mozc");
-    const std::wstring feedback_path = JoinPath(mozc_dir, L"zenz_feedback.tsv");
-
-    ::DeleteFileW(feedback_path.c_str());
-    ::RemoveDirectoryW(mozc_dir.c_str());
-    ::RemoveDirectoryW(local_low_dir.c_str());
-    ::RemoveDirectoryW(app_data_dir.c_str());
-    ::RemoveDirectoryW(profile_dir_.c_str());
+    SystemUtil::SetUserProfileDirectory(old_profile_dir_);
   }
 
   bool ok() const { return ok_; }
 
   std::wstring feedback_path() const {
-    const std::wstring app_data_dir = JoinPath(profile_dir_, L"AppData");
-    const std::wstring local_low_dir = JoinPath(app_data_dir, L"LocalLow");
-    const std::wstring mozc_dir = JoinPath(local_low_dir, L"Mozc");
-    return JoinPath(mozc_dir, L"zenz_feedback.tsv");
+    return JoinPath(Utf8ToWide(profile_dir_.path()), L"zenz_feedback.tsv");
   }
 
   std::wstring temp_file_path(const std::string& name) const {
-    return JoinPath(profile_dir_, std::wstring(name.begin(), name.end()));
+    return JoinPath(Utf8ToWide(profile_dir_.path()),
+                    std::wstring(name.begin(), name.end()));
   }
 
  private:
+  static std::wstring Utf8ToWide(const std::string& s) {
+    if (s.empty()) {
+      return std::wstring();
+    }
+    const int wide_size = ::MultiByteToWideChar(
+        CP_UTF8, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+    if (wide_size <= 0) {
+      return std::wstring();
+    }
+    std::wstring w(wide_size, L'\0');
+    ::MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
+                          w.data(), wide_size);
+    return w;
+  }
+
   bool ok_ = false;
-  bool has_old_profile_ = false;
-  std::wstring old_profile_;
-  std::wstring profile_dir_;
+  std::string old_profile_dir_;
+  TempDirectory profile_dir_;
 };
 
 #elif defined(__APPLE__)
@@ -623,7 +594,7 @@ TEST(ZenzFeedbackStoreTest, GetAcceptedCandidatesAcceptsUtf8Bom) {
 
   ZenzFeedbackStore store;
 
-  // Create %USERPROFILE%\AppData\LocalLow\Mozc first.  This test intentionally
+  // Create the product directory first.  This test intentionally
   // overwrites the TSV directly to simulate a file saved by tools/editors that
   // write UTF-8 with BOM.
   store.RecordAccepted("__mkdir__", "empty", "__mkdir__");

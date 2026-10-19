@@ -170,15 +170,6 @@ void TerminateMozcProcessByImageName(const wchar_t* image_name,
   ::CloseHandle(snapshot);
 }
 
-void ShutdownZenzRuntimeProcesses() {
-  TerminateMozcProcessByImageName(
-      L"mozc_zenz_scorer.exe",
-      "mozc_zenz_scorer.exe");
-  TerminateMozcProcessByImageName(
-      L"llama-server.exe",
-      "llama-server.exe");
-}
-
 // Retrieves the value for an installer property.
 // Returns an empty string if a property corresponding to |name| is not found or
 // error occurs.
@@ -360,9 +351,6 @@ constexpr MozcFirewallRule kMozcOfflineFirewallRules[] = {
     {L"Mozc Offline - Block mozc_broker outbound", "mozc_broker.exe"},
     {L"Mozc Offline - Block mozc_cache_service outbound",
      "mozc_cache_service.exe"},
-    {L"Mozc Offline - Block mozc_zenz_scorer outbound",
-     "mozc_zenz_scorer.exe"},
-    {L"Mozc Offline - Block llama-server outbound", "llama-server.exe"},
 };
 
 void DeleteFirewallRule(std::wstring_view rule_name) {
@@ -451,8 +439,6 @@ UINT __stdcall OpenUninstallSurveyPage(MSIHANDLE msi_handle) {
 UINT __stdcall ShutdownServer(MSIHANDLE msi_handle) {
   DEBUG_BREAK_FOR_DEBUGGER();
 
-  ShutdownZenzRuntimeProcesses();
-
   std::unique_ptr<mozc::client::ClientInterface> server_client(
       mozc::client::ClientFactory::NewClient());
   if (server_client->PingServer()) {
@@ -470,8 +456,6 @@ UINT __stdcall ShutdownServer(MSIHANDLE msi_handle) {
     // they are still running. Just log error then go ahead.
     LOG_ERROR_FOR_OMAHA();
   }
-
-  ShutdownZenzRuntimeProcesses();
 
   return ERROR_SUCCESS;
 }

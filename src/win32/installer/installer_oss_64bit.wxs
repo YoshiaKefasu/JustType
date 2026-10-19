@@ -57,8 +57,8 @@
     http://msdn.microsoft.com/en-us/library/aa367850.aspx.
     So we change the product ID for every new version.
   -->
-  <Package Name="Mozkey" Language="1041" Codepage="932" Version="$(var.MozcVersion)" Manufacturer="koyasi777" UpgradeCode="$(var.UpgradeCode)" InstallerVersion="500">
-    <SummaryInformation Keywords="Installer" Description="Mozkey インストーラー" Manufacturer="koyasi777" Codepage="932" />
+  <Package Name="JustType" Language="1041" Codepage="932" Version="$(var.MozcVersion)" Manufacturer="koyasi777" UpgradeCode="$(var.UpgradeCode)" InstallerVersion="500" Scope="perMachine">
+    <SummaryInformation Keywords="Installer" Description="JustType インストーラー" Manufacturer="koyasi777" Codepage="932" />
 
     <!--
        While obtaining the OS build number from the registry does not seem to be officially
@@ -101,10 +101,10 @@
     <Property Id="OS_BUILD_NUMBER" Secure="yes">
       <RegistrySearch Id="CurrentBuildNumberValue" Type="raw" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" />
     </Property>
-    <Launch Condition="(OS_BUILD_NUMBER AND (OS_BUILD_NUMBER &gt;= 17763)) OR (REMOVE=&quot;ALL&quot;)" Message="Mozkey をインストールするには Windows 10 1809 以降にアップグレードする必要があります。" />
+    <Launch Condition="(OS_BUILD_NUMBER AND (OS_BUILD_NUMBER &gt;= 17763)) OR (REMOVE=&quot;ALL&quot;)" Message="JustType をインストールするには Windows 10 1809 以降にアップグレードする必要があります。" />
 
     <!-- Check if the user have the administrative privileges. -->
-    <Launch Condition="Privileged" Message="Mozkey をインストールするには管理者権限が必要です。" />
+    <Launch Condition="Privileged" Message="JustType をインストールするには管理者権限が必要です。" />
     <Media Id="1" Cabinet="Mozc.cab" EmbedCab="yes" CompressionLevel="high" />
 
     <?if $(var.MozcTIP64ArmPath) == "" and $(var.MozcTIP64XPath) == "" and $(var.MozcUniversalInstaller) == "" ?>
@@ -125,6 +125,11 @@
     <!-- Disable Modify and Repair buttons. -->
     <Property Id="ARPNOMODIFY" Value="1" />
     <Property Id="ARPNOREPAIR" Value="1" />
+    <!-- Never prompt for a reboot. The TIP registration and the firewall rules
+         are both applied per machine and take effect without a restart, and an
+         IME installer that reboots the machine loses whatever the user was
+         typing in other applications. -->
+    <Property Id="REBOOT" Value="ReallySuppress" />
 
     <!--
        TODO: Consider migrating to "MajorUpgrade" rule.
@@ -136,10 +141,10 @@
     </Upgrade>
 
     <UI>
-      <Error Id="4000" Message="新しいバージョンの Mozkey が既にインストールされています。" />
+      <Error Id="4000" Message="新しいバージョンの JustType が既にインストールされています。" />
     </UI>
 
-    <Feature Id="MozcInstall" Title="Mozkey" Level="1">
+    <Feature Id="MozcInstall" Title="JustType" Level="1">
       <ComponentRef Id="MozcTIP32" />
       <ComponentRef Id="MozcTIP64" />
       <?if $(var.MozcTIP64ArmPath) != "" and $(var.MozcTIP64XPath) != "" ?>
@@ -171,13 +176,14 @@
       <ComponentRef Id="PrelaunchProcesses" />
       <ComponentRef Id="CreditsEn" />
 
-      <ComponentRef Id="ZenzScorer" />
-      <ComponentRef Id="ZenzLlamaServer" />
-      <ComponentRef Id="ZenzModel" />
-      <ComponentRef Id="ZenzThirdPartyNotices" />
-      <ComponentRef Id="ZenzApacheLicense" />
-      <ComponentRef Id="ZenzLlamaCppMitLicense" />
-      <ComponentRef Id="ZenzModelNotice" />
+      <ComponentRef Id="MeltypeEnglishList" />
+      <ComponentRef Id="MeltypeEnglishWordsList" />
+      <ComponentRef Id="MeltypeEnglishReadableList" />
+      <ComponentRef Id="MeltypeJapaneseList" />
+      <ComponentRef Id="MeltypeProperNounsList" />
+
+      <ComponentRef Id="GenInterfaceFontRegular" />
+      <ComponentRef Id="GenInterfaceFontBold" />
     </Feature>
 
     <Binary Id="mozc_installer_helper.dll" SourceFile="$(var.CustomActions64Path)" />
@@ -222,16 +228,18 @@
       <Custom Action="ShutdownServer" Before="InstallValidate" />
       <Custom Action="NewerVersionError" After="FindRelatedProducts" Condition="NEWERVERSIONDETECTED" />
       <!--
-        RemoveExistingProducts needs to be scheduled between InstallExecute and
-        InstallFinalize to correctly deal with errors which occur when the old
-        product is removed on upgrade.
+        RemoveExistingProducts is scheduled right after InstallInitialize so
+        that the previous product is fully uninstalled before any of the new
+        files are written.  A late REP (between InstallExecute and
+        InstallFinalize) lets Windows Installer keep an already-installed file
+        whenever it considers the version/hash equivalent, which left stale
+        binaries in place after an upgrade.
         http://msdn.microsoft.com/en-us/library/aa371197(VS.85).aspx
       -->
-      <InstallExecute Before="RemoveExistingProducts" />
-      <RemoveExistingProducts Before="StopCacheServiceForRollback" />
+      <RemoveExistingProducts After="InstallInitialize" />
       <!--
         When the installer enters rollback mode, the cache service should be
-        stopped before RemoveExistingProducts is invoked.
+        stopped before the remaining install actions run.
       -->
       <Custom Action="StopCacheServiceForRollback" Before="RestoreServiceState" Condition="(NOT (REMOVE=&quot;ALL&quot;))" />
       <Custom Action="RestoreServiceState" Before="RegisterTIPRollback64" Condition="(NOT (REMOVE=&quot;ALL&quot;))" />
@@ -250,7 +258,7 @@
       <Custom Action="EnableTipProfile" Before="InstallFinalize" Condition="NOT (REMOVE=&quot;ALL&quot;)" />
       <!-- show reboot dialog to execute pending file opartions -->
       <?if ($(var.VSConfigurationName) = "Release") ?>
-        <ScheduleReboot After="InstallFinalize" Condition="(REMOVE=&quot;ALL&quot;)" />
+        <ScheduleReboot After="InstallFinalize" Condition="(REMOVE=&quot;ALL&quot;) AND (NOT UPGRADINGPRODUCTCODE)" />
       <?endif?>
     </InstallExecuteSequence>
 
@@ -309,31 +317,28 @@
           <File Id="mozc_tool.exe" Name="mozc_tool.exe" DiskId="1" Checksum="yes" Source="$(var.MozcToolPath)" Vital="yes" KeyPath="yes" />
         </Component>
 
-        <Component Id="ZenzScorer">
-          <File Id="mozc_zenz_scorer_exe" Name="mozc_zenz_scorer.exe" DiskId="1" Checksum="yes" Source="$(var.ZenzScorerPath)" Vital="yes" KeyPath="yes" />
-        </Component>
-        <Component Id="ZenzLlamaServer">
-          <File Id="llama_server_exe" Name="llama-server.exe" DiskId="1" Checksum="yes" Source="$(var.ZenzLlamaServerPath)" Vital="yes" KeyPath="yes" />
-        </Component>
-
-        <Directory Id="ZenzModelsDir" Name="models">
-          <Component Id="ZenzModel">
-            <File Id="zenz_v3_2_small_Q5_K_M_gguf" Name="zenz-v3.2-small-Q5_K_M.gguf" DiskId="1" Source="$(var.ZenzModelPath)" Vital="yes" KeyPath="yes" />
+        <!--
+          Meltype's English/Japanese dictionaries.  Installed as
+          <MozcDir>\meltype_dictionaries, which is the directory
+          MeltypeBridge::ResolveDictionaryDirectory() looks in next to the server
+          binary.  Without these the segmenter finds no data, IsAvailable()
+          returns false and the mixed-script segmentation silently does nothing.
+        -->
+        <Directory Id="MeltypeDictionariesDir" Name="meltype_dictionaries">
+          <Component Id="MeltypeEnglishList">
+            <File Id="meltype_english_txt" Name="english.txt" DiskId="1" Source="$(var.MeltypeEnglishPath)" Vital="yes" KeyPath="yes" />
           </Component>
-        </Directory>
-
-        <Directory Id="ZenzLicensesDir" Name="licenses">
-          <Component Id="ZenzThirdPartyNotices">
-            <File Id="zenz_third_party_notices_md" Name="THIRD_PARTY_NOTICES.md" DiskId="1" Checksum="yes" Source="$(sys.SOURCEFILEDIR)zenz_runtime\licenses\THIRD_PARTY_NOTICES.md" Vital="yes" KeyPath="yes" />
+          <Component Id="MeltypeEnglishWordsList">
+            <File Id="meltype_english_words_txt" Name="english-words.txt" DiskId="1" Source="$(var.MeltypeEnglishWordsPath)" Vital="yes" KeyPath="yes" />
           </Component>
-          <Component Id="ZenzApacheLicense">
-            <File Id="zenz_apache_2_0_txt" Name="Apache-2.0.txt" DiskId="1" Checksum="yes" Source="$(sys.SOURCEFILEDIR)zenz_runtime\licenses\Apache-2.0.txt" Vital="yes" KeyPath="yes" />
+          <Component Id="MeltypeEnglishReadableList">
+            <File Id="meltype_english_readable_txt" Name="english-readable.txt" DiskId="1" Source="$(var.MeltypeEnglishReadablePath)" Vital="yes" KeyPath="yes" />
           </Component>
-          <Component Id="ZenzLlamaCppMitLicense">
-            <File Id="zenz_llama_cpp_mit_txt" Name="llama.cpp-MIT.txt" DiskId="1" Checksum="yes" Source="$(sys.SOURCEFILEDIR)zenz_runtime\licenses\llama.cpp-MIT.txt" Vital="yes" KeyPath="yes" />
+          <Component Id="MeltypeJapaneseList">
+            <File Id="meltype_japanese_txt" Name="japanese.txt" DiskId="1" Source="$(var.MeltypeJapanesePath)" Vital="yes" KeyPath="yes" />
           </Component>
-          <Component Id="ZenzModelNotice">
-            <File Id="zenz_model_notice_txt" Name="zenz-v3.2-small-gguf.txt" DiskId="1" Checksum="yes" Source="$(sys.SOURCEFILEDIR)zenz_runtime\licenses\zenz-v3.2-small-gguf.txt" Vital="yes" KeyPath="yes" />
+          <Component Id="MeltypeProperNounsList">
+            <File Id="meltype_propernouns_txt" Name="propernouns.txt" DiskId="1" Source="$(var.MeltypeProperNounsPath)" Vital="yes" KeyPath="yes" />
           </Component>
         </Directory>
 
@@ -406,6 +411,26 @@
           <?endif?>
         </Directory>
       </Directory>
+    </StandardDirectory>
+
+    <!--
+      Gen Interface JP Display faces, installed into the Windows system font
+      folder (FontsFolder) with TrueType="yes" so the Font table entry is
+      generated and the family is registered machine wide.  The previous
+      per-process registrations (AddFontResourceExW with FR_PRIVATE in the
+      renderer, QFontDatabase::addApplicationFont in the config dialog) never
+      entered the DirectWrite system font collection, so the candidate window
+      fell back to a substitute face; DirectWrite, GDI and Qt all resolve the
+      system-installed family without any per-process registration.
+      Permanent="yes": the faces stay registered for the OS after uninstall.
+    -->
+    <StandardDirectory Id="FontsFolder">
+      <Component Id="GenInterfaceFontRegular" Permanent="yes">
+        <File Id="GenInterfaceJPDisplay_Regular_ttf" Name="GenInterfaceJPDisplay-Regular.ttf" Source="$(var.GenInterfaceJpDisplayRegularPath)" TrueType="yes" Vital="yes" KeyPath="yes" />
+      </Component>
+      <Component Id="GenInterfaceFontBold" Permanent="yes">
+        <File Id="GenInterfaceJPDisplay_Bold_ttf" Name="GenInterfaceJPDisplay-Bold.ttf" Source="$(var.GenInterfaceJpDisplayBoldPath)" TrueType="yes" Vital="yes" KeyPath="yes" />
+      </Component>
     </StandardDirectory>
 
     <!--

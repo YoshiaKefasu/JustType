@@ -53,7 +53,12 @@ int RunConfigDialog(int argc, char *argv[]) {
     return -1;
   }
 
-  mozc::gui::GuiUtil::InstallTranslator("config_dialog");
+  // 旧 config_dialog_ja.qm 由来の翻訳は入れない。あの .qm は「Zenz...」と
+  // いう昔の文言をコンパイル済みで持っていて、retranslateUi のたびに .ui
+  // ファイルや C++ に書いてある最新の「システムOne (Jev / Laya)」の文言を
+  // 上書きしてしまう。翻訳を外しても既定の日本語 UI はそのまま出るので、
+  // 古い文言が復活する経路だけを塞ぐ。
+  // mozc::gui::GuiUtil::InstallTranslator("config_dialog");
   mozc::gui::GuiUtil::InstallTranslator("keymap");
   mozc::gui::ConfigDialog mozc_config;
 

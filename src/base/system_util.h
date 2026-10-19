@@ -50,8 +50,9 @@ class SystemUtil {
   SystemUtil(const SystemUtil&) = delete;
   SystemUtil& operator=(const SystemUtil&) = delete;
   // return "~/.mozc" for Unix/Mac
-  // return "%USERPROFILE%\\AppData\\LocalLow\\"
-  //        "Google\\Google Japanese Input" for Windows Vista and later.
+  // return "%USERPROFILE%\\AppData\\LocalLow\\JustType" for Windows Vista and
+  // later.  "Mozc" is used instead when that directory already exists, for
+  // backward compatibility with the pre-rename product name.
   static std::string GetUserProfileDirectory();
 
   // return ~/Library/Logs/Mozc for Mac
@@ -124,6 +125,13 @@ class SystemUtil {
   // You need not to delete the returned pointer.
   // This function is thread safe.
   static const wchar_t* GetSystemDir();
+
+  // Returns the product directory name to use under |local_low_dir|.
+  // An existing "JustType" directory wins, then an existing "Mozc" directory
+  // for backward compatibility, and "JustType" otherwise.
+  // Exposed for unit testing.
+  static std::string ResolveUserProfileDirectoryName(
+      absl::string_view local_low_dir);
 #endif  // _WIN32
 
   // return string representing os version

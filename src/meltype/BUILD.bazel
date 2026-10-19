@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 The Mozkey Authors
+#
+# Meltype (GPL-3.0-or-later) 由来の英日混在セグメンテーション。
+# 区間分けのロジック本体 (scored_segmenter / romaji_detector / word_list) と、
+# 判定に使う辞書データ (dictionaries/) を同じパッケージに置く。
+
+load(
+    "//:build_defs.bzl",
+    "mozc_cc_library",
+    "mozc_cc_test",
+)
+
+package(default_visibility = ["//visibility:private"])
+
+# The dictionary files are inputs to the MSI, so //win32/installer needs to name
+# them directly.  The filegroup below is not usable there: $(location) on a
+# filegroup with several sources is ambiguous.
+exports_files(
+    [
+        "dictionaries/english.txt",
+        "dictionaries/english-words.txt",
+        "dictionaries/english-readable.txt",
+        "dictionaries/japanese.txt",
+        "dictionaries/propernouns.txt",
+    ],
+    visibility = ["//win32/installer:__pkg__"],
+)
+
+# セグメンテーション本体。//session から配線される。
+mozc_cc_library(
+    name = "meltype_segmenter",
+    srcs = [
+        "romaji_detector.cc",
+        "scored_segmenter.cc",
+        "word_list.cc",
+    ],
+    hdrs = [
+        "romaji_detector.h",
+        "scored_segmenter.h",
+        "word_list.h",
+    ],
+    visibility = [
+        "//session:__pkg__",
+    ],
+    deps = [
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+# 辞書データ。実行時に MeltypeDictionaryDirectory() が探すので、
+# これを data として依存するターゲットから runfiles 経由で読める。
+filegroup(
+    name = "meltype_dictionaries",
+    srcs = glob(["dictionaries/*.txt"]),
+    visibility = [
+        "//session:__pkg__",
+    ],
+)
+
+mozc_cc_test(
+    name = "meltype_segmenter_test",
+    size = "small",
+    srcs = ["meltype_segmenter_test.cc"],
+    data = [":meltype_dictionaries"],
+    deps = [
+        ":meltype_segmenter",
+    ],
+)

@@ -89,16 +89,6 @@ mozc_cc_library(
 )
 
 mozc_cc_library(
-    name = "zenz_segment_projection",
-    srcs = ["zenz_segment_projection.cc"],
-    hdrs = ["zenz_segment_projection.h"],
-    deps = [
-        "//base:util",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-mozc_cc_library(
     name = "zenz_orthography_policy",
     srcs = ["zenz_orthography_policy.cc"],
     hdrs = ["zenz_orthography_policy.h"],
@@ -112,84 +102,56 @@ mozc_cc_library(
 )
 
 mozc_cc_library(
-    name = "zenz_adoption_policy",
-    srcs = ["zenz_adoption_policy.cc"],
-    hdrs = ["zenz_adoption_policy.h"],
+    name = "meltype_bridge",
+    srcs = ["meltype_bridge.cc"],
+    hdrs = ["meltype_bridge.h"],
+    visibility = [
+        "//server:__pkg__",
+        "//session:__pkg__",
+    ],
     deps = [
-        ":zenz_orthography_policy",
-        ":zenz_segment_projection",
+        "//base:system_util",
+        "//meltype:meltype_segmenter",
         "@com_google_absl//absl/strings",
     ],
 )
 
+# Piece pipeline: Mozc's multi-clause conversion stays the baseline; Meltype
+# protects the English pieces on top of it (typed letters with the boundary
+# spaces), aligns its piece boundaries against the reading (refusing toward
+# "show Mozc" when they disagree), and feeds the SystemOne questions their
+# left contexts and options.
+#
+# Deliberately free of protobuf: the pipeline has to reason about readings as
+# characters, and a protobuf dependency would confine it to the Session
+# build, which cannot be exercised without the whole engine.  Keeping it
+# standalone is what lets //session:session_e2e_test run the exact same code
+# the key-event path runs, against the real dictionaries and the real
+# SystemOne client.
 mozc_cc_library(
-    name = "zenz_context_script_analyzer",
-    srcs = ["zenz_context_script_analyzer.cc"],
-    hdrs = ["zenz_context_script_analyzer.h"],
+    name = "meltype_piece_pipeline",
+    srcs = ["meltype_piece_pipeline.cc"],
+    hdrs = ["meltype_piece_pipeline.h"],
+    visibility = [
+        "//session:__pkg__",
+    ],
     deps = [
+        # base:util for Util::CharsLen / Utf8SubString: the English-boundary
+        # slice splits values at character granularity.  No protobuf — the
+        # target stays standalone (see the comment above).
         "//base:util",
-        "@com_google_absl//absl/strings",
+        "//meltype:meltype_segmenter",
     ],
 )
 
-mozc_cc_library(
-    name = "zenz_text_privacy_analyzer",
-    srcs = ["zenz_text_privacy_analyzer.cc"],
-    hdrs = ["zenz_text_privacy_analyzer.h"],
+mozc_cc_test(
+    name = "meltype_piece_pipeline_test",
+    size = "small",
+    srcs = ["meltype_piece_pipeline_test.cc"],
     deps = [
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-mozc_cc_library(
-    name = "zenz_context_sanitizer",
-    srcs = ["zenz_context_sanitizer.cc"],
-    hdrs = ["zenz_context_sanitizer.h"],
-    deps = [
-        ":zenz_context_script_analyzer",
-        ":zenz_text_privacy_analyzer",
-        "//base:util",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-mozc_cc_library(
-    name = "zenz_client_context",
-    srcs = ["zenz_client_context.cc"],
-    hdrs = ["zenz_client_context.h"],
-    deps = [
-        "//protocol:commands_cc_proto",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-mozc_cc_library(
-    name = "zenz_context_assembler",
-    srcs = ["zenz_context_assembler.cc"],
-    hdrs = ["zenz_context_assembler.h"],
-    deps = [
-        ":zenz_context_sanitizer",
-        ":zenz_context_selector",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-mozc_cc_library(
-    name = "zenz_context_selector",
-    srcs = ["zenz_context_selector.cc"],
-    hdrs = ["zenz_context_selector.h"],
-    deps = [
-        "//base:util",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-mozc_cc_library(
-    name = "zenz_prompt_builder",
-    srcs = ["zenz_prompt_builder.cc"],
-    hdrs = ["zenz_prompt_builder.h"],
-    deps = [
-        "@com_google_absl//absl/strings",
+        ":meltype_piece_pipeline",
+        "//meltype:meltype_segmenter",
+        "//testing:gunit_main",
     ],
 )
 
@@ -197,17 +159,9 @@ mozc_cc_library(
     name = "session",
     srcs = [
         "session.cc",
-        "zenz_client_factory.cc",
-        "zenz_live_corrector.cc",
-        "zenz_named_pipe_client.cc",
-        "zenz_unix_socket_client.cc",
     ],
     hdrs = [
         "session.h",
-        "zenz_client_factory.h",
-        "zenz_live_corrector.h",
-        "zenz_named_pipe_client.h",
-        "zenz_unix_socket_client.h",
     ],
     visibility = [
         "//evaluation/candidates_diff_checker:__pkg__",
@@ -216,16 +170,14 @@ mozc_cc_library(
         ":ime_context",
         ":key_event_transformer",
         ":keymap",
+        ":meltype_bridge",
+        ":meltype_piece_pipeline",
+        ":systemone_client",
+        ":systemone_logger",
+        ":systemone_worker",
+        ":trace_logger",
         ":vertical_writing_key_transform",
-        ":zenz_adoption_policy",
-        ":zenz_client_context",
-        ":zenz_context_assembler",
-        ":zenz_context_sanitizer",
-        ":zenz_feedback_store",
         ":zenz_output_validator",
-        ":zenz_prompt_builder",
-        ":zenz_segment_projection",
-        ":zenz_text_privacy_analyzer",
         "//base:clock",
         "//base:util",
         "//composer",
@@ -237,8 +189,6 @@ mozc_cc_library(
         "//protocol:commands_cc_proto",
         "//protocol:config_cc_proto",
         "//transliteration",
-        "//zenz:unix_socket_path",
-        "//zenz:wire_protocol",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
@@ -250,39 +200,6 @@ mozc_cc_library(
             "//base:system_util",
         ],
     ),
-)
-
-mozc_cc_test(
-    name = "zenz_client_factory_test",
-    size = "small",
-    srcs = ["zenz_client_factory_test.cc"],
-    deps = [
-        ":session",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_unix_socket_client_test",
-    size = "small",
-    srcs = ["zenz_unix_socket_client_test.cc"],
-    deps = [
-        ":session",
-        "//testing:gunit_main",
-        "//zenz:wire_protocol",
-        "@com_google_absl//absl/time",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_named_pipe_client_test",
-    size = "small",
-    srcs = ["zenz_named_pipe_client_test.cc"],
-    deps = [
-        ":session",
-        "//testing:gunit_main",
-        "//zenz:wire_protocol",
-    ],
 )
 
 # SystemOne (Jev / Laya) client.  Talks to the SystemOne endpoint directly
@@ -322,13 +239,70 @@ mozc_cc_test(
     ],
 )
 
-mozc_cc_test(
-    name = "zenz_segment_projection_test",
-    size = "small",
-    srcs = ["zenz_segment_projection_test.cc"],
+# Runs SystemOneClient::Ask on a dedicated worker thread so the key-event path
+# submits and returns; the answer comes back through an APPLY_SYSTEMONE_LIVE
+# delayed callback: latest-only submission and generation-matched retrieval.
+mozc_cc_library(
+    name = "systemone_worker",
+    srcs = ["systemone_worker.cc"],
+    hdrs = ["systemone_worker.h"],
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//session:__pkg__"],
     deps = [
-        ":zenz_segment_projection",
-        "//testing:gunit_main",
+        ":systemone_client",
+    ],
+)
+
+# Per-keystroke pipeline trace written to <product dir>/trace.log
+# (Windows: AppData\LocalLow\JustType\trace.log).  One block per pipeline entry
+# with per-step timings.  Disabled with MOZC_TRACE_LOG=0; a logging failure
+# never breaks the IME.
+mozc_cc_library(
+    name = "trace_logger",
+    srcs = ["trace_logger.cc"],
+    hdrs = ["trace_logger.h"],
+    target_compatible_with = ["@platforms//os:windows"],
+    visibility = ["//session:__pkg__"],
+    deps = [
+        "//base:system_util",
+    ],
+)
+
+# End-to-end pipeline: romaji input -> romanization -> Meltype English/Japanese
+# segmentation -> live conversion -> SystemOne decision -> commit, together with
+# the keymap binding and the bundled-font registration the same pipeline relies
+# on.
+#
+# The stages under test are the production ones (meltype_piece_pipeline.cc,
+# systemone_client.cc, systemone_logger.cc, win32_font_resource.cc) driven with
+# the real dictionary files, the real romanji-hiragana table and the real
+# ms-ime.tsv keymap.  Only the dictionary converter is mocked, which is the same
+# simplification Mozc's own session tests make (they use
+# MockEngineConverterInterface).
+mozc_cc_test(
+    name = "session_e2e_test",
+    size = "small",
+    srcs = ["session_e2e_test.cc"],
+    target_compatible_with = ["@platforms//os:windows"],
+    data = [
+        "//data/fonts:GenInterfaceJPDisplay-Regular.ttf",
+        "//data/fonts:GenInterfaceJPDisplay-Bold.ttf",
+        "//data/keymap:keymap_files",
+        "//data/preedit:composition_table",
+        "//meltype:meltype_dictionaries",
+        # The [7] keymap checks read keymap.cc out of the source tree to make
+        # sure the commands ms-ime.tsv names are the ones actually registered.
+        # Without it the runfiles do not carry the file and the read comes back
+        # empty, which reads as "nothing is registered" rather than as the
+        # missing data it is.
+        "//session:keymap.cc",
+    ],
+    deps = [
+        ":meltype_piece_pipeline",
+        ":systemone_client",
+        ":systemone_logger",
+        "//meltype:meltype_segmenter",
+        "//renderer/win32:win32_font_resource",
     ],
 )
 
@@ -338,87 +312,6 @@ mozc_cc_test(
     srcs = ["zenz_orthography_policy_test.cc"],
     deps = [
         ":zenz_orthography_policy",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_adoption_policy_test",
-    size = "small",
-    srcs = ["zenz_adoption_policy_test.cc"],
-    deps = [
-        ":zenz_adoption_policy",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_context_script_analyzer_test",
-    size = "small",
-    srcs = ["zenz_context_script_analyzer_test.cc"],
-    deps = [
-        ":zenz_context_script_analyzer",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_text_privacy_analyzer_test",
-    size = "small",
-    srcs = ["zenz_text_privacy_analyzer_test.cc"],
-    deps = [
-        ":zenz_text_privacy_analyzer",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_context_sanitizer_test",
-    size = "small",
-    srcs = ["zenz_context_sanitizer_test.cc"],
-    deps = [
-        ":zenz_context_sanitizer",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_prompt_builder_test",
-    size = "small",
-    srcs = ["zenz_prompt_builder_test.cc"],
-    deps = [
-        ":zenz_prompt_builder",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_client_context_test",
-    size = "small",
-    srcs = ["zenz_client_context_test.cc"],
-    deps = [
-        ":zenz_client_context",
-        "//protocol:commands_cc_proto",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_context_assembler_test",
-    size = "small",
-    srcs = ["zenz_context_assembler_test.cc"],
-    deps = [
-        ":zenz_context_assembler",
-        "//testing:gunit_main",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_context_selector_test",
-    size = "small",
-    srcs = ["zenz_context_selector_test.cc"],
-    deps = [
-        ":zenz_context_selector",
         "//testing:gunit_main",
     ],
 )
@@ -521,7 +414,6 @@ mozc_cc_library(
     deps = [
         ":keymap",
         ":session",
-        ":zenz_context_request",
         "//base:clock",
         "//base:stopwatch",
         "//base:util",
@@ -1065,27 +957,5 @@ mozc_cc_test(
         "//protocol:config_cc_proto",
         "//testing:gunit_main",
         "@com_google_absl//absl/strings",
-    ],
-)
-
-mozc_cc_library(
-    name = "zenz_context_request",
-    srcs = ["zenz_context_request.cc"],
-    hdrs = ["zenz_context_request.h"],
-    deps = [
-        "//protocol:commands_cc_proto",
-        "//protocol:config_cc_proto",
-    ],
-)
-
-mozc_cc_test(
-    name = "zenz_context_request_test",
-    size = "small",
-    srcs = ["zenz_context_request_test.cc"],
-    deps = [
-        ":zenz_context_request",
-        "//protocol:commands_cc_proto",
-        "//protocol:config_cc_proto",
-        "//testing:gunit_main",
     ],
 )

@@ -123,21 +123,16 @@ std::wstring RedactedWidePathStats(const wchar_t* label,
 bool EnsureDirectoryExists(const std::wstring& dir);
 bool IsWritableDirectory(const std::wstring& dir);
 
-std::wstring GetUserProfileDir() {
-  wchar_t buffer[MAX_PATH] = {};
-  const DWORD n = ::GetEnvironmentVariableW(L"USERPROFILE", buffer, MAX_PATH);
-  if (n == 0 || n >= MAX_PATH) {
+// Returns the product directory (LocalLow\JustType, or LocalLow\Mozc for a
+// pre-rename installation).  It is resolved through SystemUtil so that this
+// store never creates a second, differently named product directory next to the
+// one the rest of the product uses.
+std::wstring GetProductDirectoryWide() {
+  const std::string dir = SystemUtil::GetUserProfileDirectory();
+  if (dir.empty()) {
     return L"";
   }
-  return std::wstring(buffer, n);
-}
-
-std::wstring GetLocalLowAppDataDir() {
-  const std::wstring user_profile = GetUserProfileDir();
-  if (user_profile.empty()) {
-    return L"";
-  }
-  return user_profile + L"\\AppData\\LocalLow";
+  return Utf8ToWide(dir);
 }
 
 bool IsWritableDirectory(const std::wstring& dir) {
@@ -188,30 +183,28 @@ bool IsWritableDirectory(const std::wstring& dir) {
 }
 
 std::wstring GetFeedbackDirWide() {
-  const std::wstring local_low = GetLocalLowAppDataDir();
-  if (local_low.empty()) {
-    StoreDebugOutputWide(L"LocalLow path unavailable");
+  const std::wstring dir = GetProductDirectoryWide();
+  if (dir.empty()) {
+    StoreDebugOutputWide(L"product directory unavailable");
     return L"";
   }
 
-  const std::wstring dir = local_low + L"\\Mozc";
-
   if (!EnsureDirectoryExists(dir)) {
     StoreDebugOutputWide(
-      std::wstring(L"LocalLow Mozc dir cannot be created ")
+      std::wstring(L"product directory cannot be created ")
           .append(RedactedWidePathStats(L"dir", dir)));
     return L"";
   }
 
   if (!IsWritableDirectory(dir)) {
     StoreDebugOutputWide(
-      std::wstring(L"LocalLow Mozc dir not writable ")
+      std::wstring(L"product directory not writable ")
           .append(RedactedWidePathStats(L"dir", dir)));
     return L"";
   }
 
   StoreDebugOutputWide(
-    std::wstring(L"selected LocalLow Mozc dir ")
+    std::wstring(L"selected product directory ")
         .append(RedactedWidePathStats(L"dir", dir)));
   return dir;
 }

@@ -39,6 +39,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFileDialog>
+#include <QFont>
 #include <QFontDatabase>
 #include <QFrame>
 #include <QGridLayout>
@@ -75,6 +76,7 @@
 
 #include <QColor>
 #include <QColorDialog>
+#include <QFileInfo>
 #include <QScrollArea>
 #include <QScreen>
 
@@ -82,6 +84,7 @@
 #include "absl/log/log.h"
 #include "absl/strings/string_view.h"
 #include "base/config_file_stream.h"
+#include "base/system_util.h"
 #include "client/client.h"
 #include "config/config_handler.h"
 #include "gui/base/util.h"
@@ -202,6 +205,46 @@ bool FontFamilyExists(const QStringList &families, const QString &family) {
   return families.contains(family, Qt::CaseInsensitive);
 }
 
+// Loads the Gen Interface JP Display faces that ship inside the MSI, so the
+// dialog's own typeface resolves whether or not the user installed the family
+// system-wide.
+//
+// setFont() by family name is not enough on its own: Qt falls back to the
+// system font for a family it cannot find, which is silent — the dialog looks
+// fine but is not drawn in the product face, and the candidate window (which
+// asks GDI for the same family) would disagree with it.  addApplicationFont()
+// registers the file for this process only, so nothing is installed machine
+// wide and there is nothing to clean up on uninstall.
+//
+// Returns how many faces were loaded.  0 is not fatal: the caller keeps the
+// family name, Qt falls back to the platform face, and the dialog stays usable.
+int LoadBundledApplicationFonts() {
+  // This helper sits in the file-scope anonymous namespace, outside
+  // namespace mozc, so SystemUtil has to be qualified.
+  const std::string server_directory = mozc::SystemUtil::GetServerDirectory();
+  if (server_directory.empty()) {
+    return 0;
+  }
+
+  const std::string base = server_directory.back() == '\\' ||
+                                   server_directory.back() == '/'
+                               ? server_directory
+                               : server_directory + "\\";
+
+  QFontDatabase font_database;
+  int loaded = 0;
+  for (const char *file_name : {"GenInterfaceJPDisplay-Regular.ttf",
+                                "GenInterfaceJPDisplay-Bold.ttf"}) {
+    const QString path =
+        QString::fromUtf8((base + "fonts\\" + file_name).c_str());
+    if (QFileInfo(path).exists() &&
+        font_database.addApplicationFont(path) >= 0) {
+      ++loaded;
+    }
+  }
+  return loaded;
+}
+
 void InitializeCandidateRubyFontComboBox(QComboBox *combo_box) {
   if (combo_box == nullptr) {
     return;
@@ -291,6 +334,94 @@ ConfigDialog::ConfigDialog()
       initial_windows_ime_icon_style_(
           static_cast<int>(config::Config::WINDOWS_IME_ICON_DEFAULT)) {
   setupUi(this);
+
+  // Gen Interface JP Display is the product's display face.  Applying it once on
+  // the dialog makes every child widget inherit it, so labels, tabs, and buttons
+  // agree without per-widget overrides.  Qt falls back to the system font for a
+  // family it cannot find, which keeps the dialog usable on a machine without it.
+  //
+  // The bundled faces are loaded first so that fallback is only ever reached on a
+  // machine where the install itself is missing the fonts directory.
+  LoadBundledApplicationFonts();
+  setFont(QFont(QString::fromUtf8("Gen Interface JP Display"), 9));
+
+  // The feature was renamed from Zenz to システムOne, and a stale config_dialog_ja.qm
+  // still carries the old "Zenz..." strings.  Qt applies a translation to every
+  // label after setupUi(), so the .ui text alone cannot win.  Setting the strings
+  // here, after setupUi(), makes the C++ the last writer and keeps the dialog on
+  // the システムOne naming no matter which .qm the user has installed.  Keep these
+  // in sync with config_dialog.ui when a label changes.
+  zenzLiveCorrectionSectionLabel->setText(
+      QString::fromUtf8("システムOne 判断型補正"));
+  zenzConditionFieldsVisibleCheckBox->setText(
+      QString::fromUtf8("システムOne 判断型条件フィールド"));
+  zenzConditionFieldsVisibleCheckBox->setToolTip(QString::fromUtf8(
+      "システムOne (Jev / Laya) のプロンプト条件フィールドの表示を切り替えます。"
+      "折りたたんでも設定値は保持され、システムOne (Jev / Laya) を使用中は送信内容は変わりません。"));
+  zenzFeedbackLearningSectionLabel->setText(
+      QString::fromUtf8("システムOne学習（Mozc変換履歴）"));
+  zenzFeedbackLearningSubsectionLabel->setText(
+      QString::fromUtf8("システムOne学習（補正フィードバック）"));
+  zenzFeedbackLearningSubsectionLabel->setToolTip(QString::fromUtf8(
+      "システムOne 補正の採用・却下を記録し、保存済みの評価を候補順位や自動ブロックの"
+      "判定に利用します。Mozc の通常変換履歴とは別に管理されます。"));
+  zenzLiveCorrectionDelayLabel->setText(
+      QString::fromUtf8("システムOne 補正開始の遅延"));
+  zenzLiveCorrectionDelayLabel->setToolTip(QString::fromUtf8(
+      "ライブ変換後、システムOne 補正を開始するまでの待ち時間です。"));
+  zenzLiveCorrectionMinKeyLengthLabel->setText(
+      QString::fromUtf8("システムOne 補正開始の最小文字数"));
+  zenzLiveCorrectionMinKeyLengthLabel->setToolTip(QString::fromUtf8(
+      "システムOne 補正を開始する最小文字数です。短くすると補正機会は増えますが、"
+      "誤補正も増える可能性があります。"));
+  zenzDeferLiveConversionDisplayCheckBox->setText(QString::fromUtf8(
+      "システムOne 補正結果が返るまで通常のライブ変換結果を表示しない"));
+  zenzDeferLiveConversionDisplayCheckBox->setToolTip(QString::fromUtf8(
+      "システムOne 補正が実行される場合、補正結果が確定するまで通常の Mozc "
+      "ライブ変換結果を表示しません。システムOne が採用されなかった場合は Mozc 結果を表示します。"));
+  zenzDeferredPresentationTimeoutLabel->setText(
+      QString::fromUtf8("システムOne 補正開始後の最大待機時間"));
+  zenzDeferredPresentationTimeoutLabel->setToolTip(QString::fromUtf8(
+      "「通常のライブ変換結果を表示しない」が有効な場合、システムOne 補正要求の送信後、"
+      "この時間以内に結果が返らなければ、その回の システムOne 補正を中止して通常の "
+      "Mozc ライブ変換結果を表示します。"));
+  zenzLiveCorrectionRightContextCheckBox->setText(
+      QString::fromUtf8("システムOne 右文脈を使用する"));
+  zenzLiveCorrectionRightContextCheckBox->setToolTip(QString::fromUtf8(
+      "クライアントからカーソル右側テキストが渡された場合、U+EE07 right context "
+      "として システムOne (Jev / Laya) のプロンプトに含めます。"));
+  zenzLiveCorrectionRightContextLengthLabel->setText(
+      QString::fromUtf8("システムOne 右文脈長"));
+  zenzLiveCorrectionRightContextLengthLabel->setToolTip(QString::fromUtf8(
+      "システムOne 右文脈として使う最大文字数です。"));
+  zenzMozcHistoryLearningCheckBox->setText(QString::fromUtf8(
+      "確定した システムOne 補正を Mozc の変換履歴に追加学習する"));
+  zenzMozcHistoryLearningCheckBox->setToolTip(QString::fromUtf8(
+      "システムOne 補正を明示的に確定した場合、Mozc の通常変換履歴へ追加学習します。"
+      "システムOne feedback の記録設定とは独立しています。Mozc 履歴学習が読み取り専用・"
+      "無効の場合や、シークレット・保護入力では書き込みません。"));
+  zenzFeedbackRecordingCheckBox->setText(
+      QString::fromUtf8("システムOne 補正の採用・却下を記録する"));
+  zenzFeedbackRecordingCheckBox->setToolTip(QString::fromUtf8(
+      "システムOne 補正の採用・却下をローカルの feedback データに記録します。保存済みデータを"
+      "変換へ自動適用するかどうか、および Mozc 履歴へ追加学習するかどうかとは独立しています。"));
+  zenzFeedbackAutoBlockCheckBox->setText(QString::fromUtf8(
+      "システムOne 補正と異なる結果で確定した場合、その補正を自動ブロックする"));
+  zenzFeedbackAutoBlockCheckBox->setToolTip(QString::fromUtf8(
+      "同じ読み・同じ文脈クラス・同じ システムOne 補正について、拒否回数と拒否割合の両方が"
+      "設定値以上になった場合に表示を抑制します。自動ブロック中も システムOne の内部生成と"
+      "最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。"
+      "通常の Mozc 候補から削除する機能ではありません。"));
+  systemoneSectionLabel->setText(
+      QString::fromUtf8("システムOne (Jev / Laya) 判断型変換"));
+  systemoneSectionLabel->setToolTip(QString::fromUtf8(
+      "文章を生成せず、状態を読んで選択肢から1つを選ぶ判断型モデルです。"
+      "生成型の システムOne パイプラインを置き換える場合に使います。"));
+  systemoneDecisionCheckBox->setText(QString::fromUtf8(
+      "システムOne (Jev/Laya) による文脈判断変換を有効にする"));
+  systemoneDecisionCheckBox->setToolTip(QString::fromUtf8(
+      "Mozc の変換結果をそのまま使い、別の判断が必要な場合だけシステムOneへ問い合わせます。"
+      "オフのときは送信も行いません。"));
 
   // Both scrollable tabs must preserve the native tab-page background and
   // avoid stylesheets that can affect checkbox and separator rendering.

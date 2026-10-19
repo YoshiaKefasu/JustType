@@ -29,13 +29,41 @@
 
 // Mozc renderer process for win32.
 
+#include "absl/log/log.h"
+#include "base/system_util.h"
 #include "base/win32/scoped_com.h"
+#include "base/win32/wide_char.h"
 #include "base/win32/winmain.h"
 #include "renderer/init_mozc_renderer.h"
+#include "renderer/win32/win32_font_resource.h"
 #include "renderer/win32/win32_server.h"
 
 int main(int argc, char* argv[]) {
   mozc::renderer::InitMozcRenderer(argv[0], &argc, &argv);
+
+  // The candidate window and its ruby overlay draw with the family the user
+  // picked in the config dialog, which is Gen Interface JP Display by default.
+  // Registering the bundled faces here is what makes that setting work on a
+  // machine where the user never installed the font; without it every face
+  // lookup silently falls back to the platform font and the candidate window
+  // renders in a different typeface from the one the dialog previews.
+  //
+  // FR_PRIVATE, so this is process-local: no system font table entry, nothing
+  // left behind after an uninstall.  A missing fonts directory is not fatal —
+  // the platform fallback below is exactly the old behaviour.
+  const std::wstring fonts_directory =
+      mozc::renderer::win32::BundledFontsDirectory(
+          mozc::win32::Utf8ToWide(mozc::SystemUtil::GetServerDirectory()));
+  const int registered = mozc::renderer::win32::RegisterBundledFonts(fonts_directory);
+  if (registered > 0) {
+    LOG(INFO) << "Registered " << registered
+              << " bundled font face(s) from "
+              << mozc::win32::WideToUtf8(fonts_directory);
+  } else {
+    LOG(WARNING) << "No bundled font faces registered from "
+                 << mozc::win32::WideToUtf8(fonts_directory)
+                 << "; falling back to the platform font";
+  }
 
   mozc::ScopedCOMInitializer com_initializer;
 

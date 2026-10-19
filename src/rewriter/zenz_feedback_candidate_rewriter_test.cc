@@ -3,6 +3,8 @@
 #include <string>
 #include <utility>
 
+#include "base/file/temp_dir.h"
+#include "base/system_util.h"
 #include "converter/attribute.h"
 #include "converter/candidate.h"
 #include "converter/segments.h"
@@ -10,6 +12,7 @@
 #include "request/conversion_request.h"
 #include "session/zenz_feedback_store.h"
 #include "testing/gunit.h"
+#include "testing/mozctest.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -19,84 +22,31 @@ namespace mozc {
 namespace {
 #if defined(_WIN32)
 
-std::wstring JoinPath(const std::wstring& lhs, const std::wstring& rhs) {
-  if (lhs.empty()) {
-    return rhs;
-  }
-  if (lhs.back() == L'\\') {
-    return lhs + rhs;
-  }
-  return lhs + L"\\" + rhs;
-}
-
-bool EnsureDirectory(const std::wstring& path) {
-  if (::CreateDirectoryW(path.c_str(), nullptr)) {
-    return true;
-  }
-  return ::GetLastError() == ERROR_ALREADY_EXISTS;
-}
-
+// Pins the profile directory through SystemUtil instead of relying on the
+// LocalLow layout.  The product directory name is resolved dynamically
+// (JustType for a fresh install, Mozc for a pre-rename one).
 class ScopedUserProfileForZenzFeedbackCandidateRewriterTest {
  public:
-  ScopedUserProfileForZenzFeedbackCandidateRewriterTest() {
-    wchar_t old_profile[32767] = {};
-    const DWORD old_len =
-        ::GetEnvironmentVariableW(L"USERPROFILE", old_profile, 32767);
-    if (old_len > 0 && old_len < 32767) {
-      has_old_profile_ = true;
-      old_profile_.assign(old_profile, old_len);
-    }
-
-    wchar_t temp_path[MAX_PATH] = {};
-    const DWORD temp_len = ::GetTempPathW(MAX_PATH, temp_path);
-    if (temp_len == 0 || temp_len >= MAX_PATH) {
+  ScopedUserProfileForZenzFeedbackCandidateRewriterTest()
+      : old_profile_dir_(SystemUtil::GetUserProfileDirectory()),
+        profile_dir_(mozc::testing::MakeTempDirectoryOrDie()) {
+    if (profile_dir_.path().empty()) {
       return;
     }
-
-    profile_dir_ =
-        std::wstring(temp_path, temp_len) +
-        L"mozc_zenz_feedback_candidate_rewriter_test_" +
-        std::to_wstring(::GetCurrentProcessId()) + L"_" +
-        std::to_wstring(static_cast<unsigned long long>(::GetTickCount64()));
-
-    const std::wstring app_data_dir = JoinPath(profile_dir_, L"AppData");
-    const std::wstring local_low_dir = JoinPath(app_data_dir, L"LocalLow");
-
-    if (!EnsureDirectory(profile_dir_) ||
-        !EnsureDirectory(app_data_dir) ||
-        !EnsureDirectory(local_low_dir)) {
-      return;
-    }
-
-    ok_ = ::SetEnvironmentVariableW(L"USERPROFILE", profile_dir_.c_str());
+    SystemUtil::SetUserProfileDirectory(profile_dir_.path());
+    ok_ = true;
   }
 
   ~ScopedUserProfileForZenzFeedbackCandidateRewriterTest() {
-    if (has_old_profile_) {
-      ::SetEnvironmentVariableW(L"USERPROFILE", old_profile_.c_str());
-    } else {
-      ::SetEnvironmentVariableW(L"USERPROFILE", nullptr);
-    }
-
-    const std::wstring app_data_dir = JoinPath(profile_dir_, L"AppData");
-    const std::wstring local_low_dir = JoinPath(app_data_dir, L"LocalLow");
-    const std::wstring mozc_dir = JoinPath(local_low_dir, L"Mozc");
-    const std::wstring feedback_path = JoinPath(mozc_dir, L"zenz_feedback.tsv");
-
-    ::DeleteFileW(feedback_path.c_str());
-    ::RemoveDirectoryW(mozc_dir.c_str());
-    ::RemoveDirectoryW(local_low_dir.c_str());
-    ::RemoveDirectoryW(app_data_dir.c_str());
-    ::RemoveDirectoryW(profile_dir_.c_str());
+    SystemUtil::SetUserProfileDirectory(old_profile_dir_);
   }
 
   bool ok() const { return ok_; }
 
  private:
   bool ok_ = false;
-  bool has_old_profile_ = false;
-  std::wstring old_profile_;
-  std::wstring profile_dir_;
+  std::string old_profile_dir_;
+  TempDirectory profile_dir_;
 };
 
 void AddSegment(absl::string_view key,

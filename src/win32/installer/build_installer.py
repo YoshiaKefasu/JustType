@@ -148,9 +148,21 @@ def run_wix4(args) -> None:
   mozc_tool = pathlib.Path(args.mozc_tool).resolve()
   custom_action = pathlib.Path(args.custom_action).resolve()
 
-  zenz_scorer = pathlib.Path(args.zenz_scorer).resolve()
-  zenz_llama_server = pathlib.Path(args.zenz_llama_server).resolve()
-  zenz_model = pathlib.Path(args.zenz_model).resolve()
+
+  meltype_english = pathlib.Path(args.meltype_english).resolve()
+  meltype_english_words = pathlib.Path(args.meltype_english_words).resolve()
+  meltype_english_readable = pathlib.Path(args.meltype_english_readable).resolve()
+  meltype_japanese = pathlib.Path(args.meltype_japanese).resolve()
+  meltype_propernouns = pathlib.Path(args.meltype_propernouns).resolve()
+
+  # Gen Interface JP Display ships inside the MSI so the candidate window and the
+  # config dialog resolve the family on a machine that never installed it.  The
+  # renderer and the dialog both register these faces per process from
+  # <MozcDir>\fonts, which is the directory the .wxs below installs them into.
+  gen_interface_jp_display_regular = pathlib.Path(
+      args.gen_interface_jp_display_regular).resolve()
+  gen_interface_jp_display_bold = pathlib.Path(
+      args.gen_interface_jp_display_bold).resolve()
 
   wix_path = pathlib.Path(args.wix_path).resolve()
 
@@ -194,9 +206,15 @@ def run_wix4(args) -> None:
       '-define', f'MozcRenderer64Path={mozc_renderer}',
       '-define', f'MozcToolPath={mozc_tool}',
       '-define', f'CustomActions64Path={custom_action}',
-      '-define', f'ZenzScorerPath={zenz_scorer}',
-      '-define', f'ZenzLlamaServerPath={zenz_llama_server}',
-      '-define', f'ZenzModelPath={zenz_model}',
+      '-define', f'MeltypeEnglishPath={meltype_english}',
+      '-define', f'MeltypeEnglishWordsPath={meltype_english_words}',
+      '-define', f'MeltypeEnglishReadablePath={meltype_english_readable}',
+      '-define', f'MeltypeJapanesePath={meltype_japanese}',
+      '-define', f'MeltypeProperNounsPath={meltype_propernouns}',
+      '-define',
+      f'GenInterfaceJpDisplayRegularPath={gen_interface_jp_display_regular}',
+      '-define',
+      f'GenInterfaceJpDisplayBoldPath={gen_interface_jp_display_bold}',
       '-define', f'DocumentsDir={document_dir}',
       '-define', f'QtDir={qt_dir}',
       '-define', 'QtVer=6',
@@ -229,9 +247,13 @@ def main():
   parser.add_argument('--mozc_tip64arm', type=str)
   parser.add_argument('--mozc_tip64x', type=str)
   parser.add_argument('--custom_action', type=str)
-  parser.add_argument('--zenz_scorer', type=str)
-  parser.add_argument('--zenz_llama_server', type=str)
-  parser.add_argument('--zenz_model', type=str)
+  parser.add_argument('--meltype_english', type=str)
+  parser.add_argument('--meltype_english_words', type=str)
+  parser.add_argument('--meltype_english_readable', type=str)
+  parser.add_argument('--meltype_japanese', type=str)
+  parser.add_argument('--gen_interface_jp_display_regular', type=str)
+  parser.add_argument('--gen_interface_jp_display_bold', type=str)
+  parser.add_argument('--meltype_propernouns', type=str)
   parser.add_argument('--icon_path', type=str)
   parser.add_argument('--credit_file', type=str)
   parser.add_argument('--qt_core_dll', type=str)

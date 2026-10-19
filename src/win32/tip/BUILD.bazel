@@ -494,11 +494,14 @@ mozc_cc_library(
     target_compatible_with = ["@platforms//os:windows"],
     deps = [
         "//base:const",
+        "//base:system_util",
+        "//base/win32:wide_char",
         "//client:client_interface",
         "//protocol:commands_cc_proto",
         "//protocol:renderer_cc_proto",
         "//renderer:renderer_style_config",
         "//renderer/win32:window_manager",
+        "//renderer/win32:win32_font_resource",
     ],
 )
 
