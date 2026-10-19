@@ -49,6 +49,14 @@ namespace session {
 //                    segments inside the piece's reading range collapse to
 //                    the chosen surface.
 //
+// One more case collapses a Japanese piece: Mozc's own typo correction
+// ("もしかして", SPELLING_CORRECTION / TYPING_CORRECTION).  When Mozc offers
+// one for exactly the piece's reading, that surface is promoted to the
+// piece's first candidate — so it is what the piece shows at 0ms instead of
+// the mis-reading, and what SystemOne sees as the natural baseline — and the
+// piece's segments collapse to it.  The correction is never invented: it is
+// only promoted when Mozc itself produced it for that reading.
+//
 // The piece boundaries are aligned against the reading (the concatenation of
 // the preedit segment keys): Japanese piece kana are matched as content, the
 // English reading around them is sliced out.  A segment straddling an English
@@ -81,6 +89,29 @@ struct PieceReadingRange {
   std::size_t end = 0;
 };
 
+// One candidate Mozc offered for a Japanese piece's reading, plus the one
+// thing the plan cares about: whether Mozc marked it as a typo correction
+// ("もしかして").  Keeping the flag next to the surface is what lets the
+// promotion be a pure function the tests can drive without protobufs.
+struct PieceCandidate {
+  std::string surface;           // whole-piece surface (focused clause + tail)
+  bool typo_correction = false;  // Mozc's SPELLING_CORRECTION/TYPING_CORRECTION
+};
+
+// The piece's candidates in the order the plan uses them: Mozc's typo
+// correction, when it offered one, first — it is the reading's most likely
+// intent and must be what the piece shows before any network answer arrives.
+// Every other candidate keeps Mozc's own order, and |surfaces| is a
+// permutation of the input (never a superset).
+struct OrderedPieceCandidates {
+  std::vector<std::string> surfaces;
+  // True when surfaces.front() is Mozc's typo correction rather than Mozc's
+  // own best conversion of the reading.
+  bool typo_correction = false;
+};
+OrderedPieceCandidates OrderPieceCandidates(
+    const std::vector<PieceCandidate>& candidates);
+
 // One question a Japanese piece puts to SystemOne: the text to the left of
 // the piece, the piece's reading, and the Mozc dictionary candidates the
 // model picks from.  English pieces never produce a question — they are never
@@ -99,7 +130,13 @@ struct PieceQuestion {
 
   // Mozc's dictionary candidates for |reading|, best first.  Never empty:
   // a question with no options would give the model nothing to choose.
+  // options.front() is Mozc's typo correction when |typo_correction| is set.
   std::vector<std::string> options;
+
+  // True when options.front() is Mozc's "もしかして" correction for this
+  // reading.  Such a piece is displayed with that surface from the first
+  // keystroke, not with Mozc's baseline mis-conversion.
+  bool typo_correction = false;
 };
 
 // The whole per-piece build for one Meltype segmentation, used to ask the
@@ -127,10 +164,14 @@ struct PiecePlan {
 //
 // |options| is parallel to |pieces|: the Mozc candidates for each Japanese
 // piece's reading, empty for English pieces and empty when the converter had
-// no answer.
+// no answer.  |typo_corrections| is parallel too and optional: true means
+// options[i].front() is Mozc's typo correction for that piece (see
+// OrderPieceCandidates), which makes the piece display that surface instead
+// of Mozc's baseline.
 PiecePlan BuildPiecePlan(
     const std::vector<mozkey::meltype::ScoredSegmenter::Segment>& pieces,
-    const std::vector<std::vector<std::string>>& options);
+    const std::vector<std::vector<std::string>>& options,
+    const std::vector<bool>& typo_corrections = {});
 
 // Applies SystemOne's answer to one piece: |segments[piece_index].value|
 // becomes |choice| and the left contexts of every later question are
@@ -148,6 +189,17 @@ bool ApplyPieceChoice(PiecePlan* plan, std::size_t piece_index,
 // there is one) and reading.  The endpoint judges `state` against `options`,
 // so this is the full question text.
 std::string PieceQuestionState(const PieceQuestion& question);
+
+// The surface each piece displays, given SystemOne's answers (parallel to
+// plan.pieces; "" = no answer): the answer when there is one, otherwise
+// Mozc's typo correction when the plan promoted one, otherwise "" — meaning
+// the piece keeps Mozc's own baseline conversion on screen.
+//
+// This is the single rule that decides when a Japanese piece is allowed to
+// leave Mozc's multi-clause baseline, so the Session and the end-to-end test
+// cannot drift apart on it.
+std::vector<std::string> ResolvePieceDisplayChoices(
+    const PiecePlan& plan, const std::vector<std::string>& systemone_choices);
 
 // Concatenates the segments with the Meltype boundary-space rule.  These two
 // are the commit string and the preedit key line.

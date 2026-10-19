@@ -105,6 +105,8 @@ class SessionTestPeer : testing::TestPeer<Session> {
   PEER_METHOD(MergeStablePresentationSpans);
   PEER_METHOD(AttachLiveConversionSuggestionCandidateWindow);
   PEER_METHOD(AttachCachedLiveConversionSuggestionCandidateWindow);
+  PEER_METHOD(ApplyMeltypePiecePreedit);
+  PEER_METHOD(CommitMeltypePieceLiveConversion);
 
   PEER_VARIABLE(context_);
   PEER_VARIABLE(undo_contexts_);
@@ -117,6 +119,7 @@ class SessionTestPeer : testing::TestPeer<Session> {
   PEER_VARIABLE(live_conversion_preedit_);
   PEER_VARIABLE(live_conversion_value_);
   PEER_VARIABLE(live_conversion_preedit_output_);
+  PEER_VARIABLE(meltype_display_protected_);
   PEER_VARIABLE(pending_live_conversion_presentation_);
   PEER_VARIABLE(pending_live_conversion_suggestion_candidate_window_);
   PEER_VARIABLE(pending_live_conversion_suggestion_context_);
@@ -1313,6 +1316,63 @@ TEST_F(SessionTest, LiveConversionAttachesPassiveSuggestionCandidateWindow) {
   EXPECT_FALSE(session_peer.live_conversion_active_());
   EXPECT_FALSE(command.output().live_conversion());
   EXPECT_PREEDIT("阿", command);
+}
+
+// Enter accepts the text already on screen.  The Meltype piece display (the
+// protected English letters, a promoted typo correction) only reaches the
+// commit through the live-conversion state, so tearing that state down before
+// Commit() would silently commit the converter's own segmentation instead —
+// a surface the user never saw.  Space is the opposite: it opens the normal
+// candidate list and must drop the state (asserted just above).
+TEST_F(SessionTest, LiveConversionCommitKeepsTheStateSpaceDrops) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  SessionTestPeer session_peer(session);
+  InitSessionToPrecomposition(&session);
+
+  config::Config config;
+  config::ConfigHandler::GetDefaultConfig(&config);
+  config.set_use_live_conversion(true);
+  config.set_live_conversion_delay_msec(0);
+  config.set_live_conversion_min_key_length(1);
+  config.set_session_keymap(config::Config::MSIME);
+  session.SetConfig(config);
+
+  Segments live_segments;
+  Segment* live_segment = live_segments.add_segment();
+  live_segment->set_key("あ");
+  AddCandidate("あ", "亜", live_segment);
+
+  EXPECT_CALL(*converter, StartConversion(_, _))
+      .Times(1)
+      .WillOnce(DoAll(SetArgPointee<1>(live_segments), Return(true)));
+
+  commands::Command command;
+  InsertCharacterString("あ", "a", &session, &command);
+  ASSERT_TRUE(session_peer.live_conversion_active_());
+
+  // The protection step records the display it produced.  "亞" deliberately
+  // differs from the converter's own "亜" so the two commit paths cannot
+  // produce the same result: whichever surface reaches result().value() says
+  // which path ran.
+  session_peer.meltype_display_protected_() = true;
+  commands::Preedit displayed;
+  commands::Preedit::Segment* displayed_segment = displayed.add_segment();
+  displayed_segment->set_key("あ");
+  displayed_segment->set_value("亞");
+  displayed_segment->set_value_length(1);
+  displayed.set_cursor(1);
+  session_peer.live_conversion_preedit_output_() = displayed;
+
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::ENTER, &session, &command));
+  ASSERT_TRUE(command.output().has_result());
+  // The visible text wins: the protected display, not the converter's own
+  // segmentation.
+  EXPECT_EQ(command.output().result().value(), "亞");
+  EXPECT_EQ(session.context().state(), ImeContext::PRECOMPOSITION);
 }
 
 TEST_F(SessionTest,

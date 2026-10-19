@@ -479,8 +479,9 @@ class Session {
 
   // Candidates are stable within one live-conversion episode, and every poll
   // tick rebuilds the display, so per-reading caching keeps a tick down to
-  // map lookups.  Cleared with the live conversion state.
-  std::map<std::string, std::vector<std::string>> piece_options_cache_;
+  // map lookups.  Cleared with the live conversion state.  The value carries
+  // Mozc's typo correction (when it offered one) already ordered first.
+  std::map<std::string, OrderedPieceCandidates> piece_options_cache_;
 
   // SystemOne's proven choices: key = PieceChoiceKey(question as asked),
   // value = the chosen surface.  Cleared with the live conversion state.
@@ -651,9 +652,13 @@ class Session {
   // delayed callback.
   SystemOneWorker* EnsureSystemOneWorker();
   // Mozc dictionary candidates for every Japanese piece's kana, collected
-  // from the dedicated piece converter and cached per reading.
+  // from the dedicated piece converter and cached per reading.  Mozc's typo
+  // correction ("もしかして") is ordered first for the piece it corrects, and
+  // |typo_corrections| — parallel to |pieces|, optional — reports where that
+  // happened.
   std::vector<std::vector<std::string>> CollectMozcPieceOptions(
-      const std::vector<mozkey::meltype::ScoredSegmenter::Segment>& pieces);
+      const std::vector<mozkey::meltype::ScoredSegmenter::Segment>& pieces,
+      std::vector<bool>* typo_corrections = nullptr);
   // Rebuilds meltype_piece_plan_ and meltype_piece_choices_ for |raw|:
   // Meltype segmentation -> piece candidates -> cached SystemOne choices.
   // False when Meltype has no opinion, in which case the caller keeps Mozc's

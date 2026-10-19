@@ -77,9 +77,38 @@ std::string BuildLeftContext(const PiecePlan& plan, const std::size_t index) {
 
 }  // namespace
 
+OrderedPieceCandidates OrderPieceCandidates(
+    const std::vector<PieceCandidate>& candidates) {
+  OrderedPieceCandidates ordered;
+  ordered.surfaces.reserve(candidates.size());
+  if (candidates.empty()) return ordered;
+
+  // Mozc's own correction is the reading's most likely intent, so it leads.
+  // Only the first one is promoted: a reading with two corrections (rare, and
+  // only for the katakana dictionary entries) has no meaningful tie-break, and
+  // promoting both would just reshuffle Mozc's list.
+  for (const PieceCandidate& candidate : candidates) {
+    if (candidate.typo_correction && !candidate.surface.empty()) {
+      ordered.surfaces.push_back(candidate.surface);
+      ordered.typo_correction = true;
+      break;
+    }
+  }
+  for (const PieceCandidate& candidate : candidates) {
+    if (candidate.surface.empty()) continue;
+    if (ordered.typo_correction &&
+        candidate.surface == ordered.surfaces.front()) {
+      continue;  // the promoted correction is already in place
+    }
+    ordered.surfaces.push_back(candidate.surface);
+  }
+  return ordered;
+}
+
 PiecePlan BuildPiecePlan(
     const std::vector<Segment>& pieces,
-    const std::vector<std::vector<std::string>>& options) {
+    const std::vector<std::vector<std::string>>& options,
+    const std::vector<bool>& typo_corrections) {
   PiecePlan plan;
   plan.pieces = pieces;
   plan.segments.reserve(pieces.size());
@@ -95,8 +124,9 @@ PiecePlan BuildPiecePlan(
       segment.key = pieces[i].kana;
       const std::vector<std::string>* piece_options =
           i < options.size() ? &options[i] : nullptr;
-      // Baseline (0ms) value: the dictionary's first candidate, or the
-      // reading itself when the converter offered nothing.
+      // Baseline (0ms) value: the dictionary's first candidate — which is
+      // Mozc's typo correction when it offered one — or the reading itself
+      // when the converter offered nothing.
       segment.value = (piece_options != nullptr && !piece_options->empty())
                           ? piece_options->front()
                           : pieces[i].kana;
@@ -111,6 +141,8 @@ PiecePlan BuildPiecePlan(
     question.piece_index = i;
     question.reading = pieces[i].kana;
     question.options = options[i];
+    question.typo_correction =
+        i < typo_corrections.size() && typo_corrections[i];
     question.left_context = BuildLeftContext(plan, i);
     plan.questions.push_back(std::move(question));
   }
@@ -150,6 +182,26 @@ std::string PieceQuestionState(const PieceQuestion& question) {
     return "読み: " + question.reading;
   }
   return "左文脈: " + question.left_context + "\n読み: " + question.reading;
+}
+
+std::vector<std::string> ResolvePieceDisplayChoices(
+    const PiecePlan& plan, const std::vector<std::string>& systemone_choices) {
+  std::vector<std::string> choices(plan.pieces.size());
+  for (const PieceQuestion& question : plan.questions) {
+    if (question.piece_index >= choices.size()) continue;
+    if (question.piece_index < systemone_choices.size() &&
+        !systemone_choices[question.piece_index].empty()) {
+      // A proven answer beats the dictionary baseline, typo correction
+      // included: the model saw the correction as an option and picked
+      // otherwise.
+      choices[question.piece_index] = systemone_choices[question.piece_index];
+      continue;
+    }
+    if (question.typo_correction && !question.options.empty()) {
+      choices[question.piece_index] = question.options.front();
+    }
+  }
+  return choices;
 }
 
 std::string JoinPieceKeys(const PiecePlan& plan) {

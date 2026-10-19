@@ -2351,8 +2351,14 @@ bool Session::SendKeyConversionState(commands::Command* command) {
     }
 
     // Explicit conversion operations such as Space, candidate movement, or Cancel
-    // promote live conversion back to normal conversion behavior.
-    if (key_command != keymap::ConversionState::INSERT_CHARACTER) {
+    // promote live conversion back to normal conversion behavior.  COMMIT is
+    // not one of them: Enter accepts the text already on screen, and tearing
+    // the live-conversion state down first would make Commit() fall back to
+    // the converter's own segmentation — committing a surface the user never
+    // saw (the un-protected English reading, or Mozc's mis-conversion where
+    // the piece pipeline promoted a typo correction).
+    if (key_command != keymap::ConversionState::INSERT_CHARACTER &&
+        key_command != keymap::ConversionState::COMMIT) {
       live_conversion_active_ = false;
       live_conversion_from_composition_ = false;
       context_->mutable_converter()->SetCandidateListVisible(true);
@@ -5318,9 +5324,37 @@ SystemOneWorker* Session::EnsureSystemOneWorker() {
 // and the request carries one criteria entry per option.
 constexpr std::size_t kMaxPieceOptions = 10;
 
+// True when Mozc marked |candidate| as its own typo correction
+// ("もしかして").  CorrectionRewriter sets the attribute unconditionally and
+// additionally writes the "→ " prefix and the "<もしかして: ...>" description
+// only on the legacy (non display_value) path, so any of the three is proof.
+bool IsMozcTypoCorrection(const commands::CandidateWord& candidate) {
+  for (const int attribute : candidate.attributes()) {
+    if (attribute == commands::SPELLING_CORRECTION ||
+        attribute == commands::TYPING_CORRECTION) {
+      return true;
+    }
+  }
+  if (!candidate.has_annotation()) return false;
+  const commands::Annotation& annotation = candidate.annotation();
+  if (annotation.has_prefix() && annotation.prefix() == "→ ") return true;
+  if (annotation.has_description()) {
+    const absl::string_view description = annotation.description();
+    if (absl::StrContains(description, "もしかして") ||
+        absl::StrContains(description, "Did you mean")) {
+      return true;
+    }
+  }
+  return false;
+}
+
 std::vector<std::vector<std::string>> Session::CollectMozcPieceOptions(
-    const std::vector<mozkey::meltype::ScoredSegmenter::Segment>& pieces) {
+    const std::vector<mozkey::meltype::ScoredSegmenter::Segment>& pieces,
+    std::vector<bool>* typo_corrections) {
   std::vector<std::vector<std::string>> options(pieces.size());
+  if (typo_corrections != nullptr) {
+    typo_corrections->assign(pieces.size(), false);
+  }
   if (piece_converter_ == nullptr) return options;
 
   composer::Composer piece_composer;
@@ -5329,7 +5363,10 @@ std::vector<std::vector<std::string>> Session::CollectMozcPieceOptions(
 
     const auto cached = piece_options_cache_.find(pieces[i].kana);
     if (cached != piece_options_cache_.end()) {
-      options[i] = cached->second;
+      options[i] = cached->second.surfaces;
+      if (typo_corrections != nullptr) {
+        (*typo_corrections)[i] = cached->second.typo_correction;
+      }
       continue;
     }
 
@@ -5361,32 +5398,58 @@ std::vector<std::vector<std::string>> Session::CollectMozcPieceOptions(
       }
     }
 
-    std::vector<std::string> piece_options;
+    // Mozc's typo correction ("もしかして") is collected separately: it is
+    // promoted to the front below, so the kMaxPieceOptions cut must never
+    // drop it.  The dictionary happily puts it at index 5 or later.
+    std::vector<PieceCandidate> piece_candidates;
+    std::vector<std::string> correction_surfaces;
     if (scratch.has_all_candidate_words()) {
       for (const commands::CandidateWord& candidate :
            scratch.all_candidate_words().candidates()) {
         if (candidate.value().empty()) continue;
         std::string surface = candidate.value() + tail;
-        if (std::find(piece_options.begin(), piece_options.end(), surface) !=
-            piece_options.end()) {
+        if (std::find(correction_surfaces.begin(), correction_surfaces.end(),
+                      surface) != correction_surfaces.end()) {
           continue;
         }
-        piece_options.push_back(std::move(surface));
-        if (piece_options.size() >= kMaxPieceOptions) break;
+        if (IsMozcTypoCorrection(candidate)) {
+          correction_surfaces.push_back(std::move(surface));
+          continue;
+        }
+        if (std::find_if(piece_candidates.begin(), piece_candidates.end(),
+                         [&surface](const PieceCandidate& existing) {
+                           return existing.surface == surface;
+                         }) != piece_candidates.end()) {
+          continue;
+        }
+        if (piece_candidates.size() >= kMaxPieceOptions) continue;
+        piece_candidates.push_back(PieceCandidate{std::move(surface), false});
       }
     }
+    for (std::string& surface : correction_surfaces) {
+      piece_candidates.push_back(PieceCandidate{std::move(surface), true});
+    }
+
     // No candidates at all: the conversion preedit still carries the piece's
     // surface, so the question keeps one honest option instead of vanishing.
-    if (piece_options.empty() && scratch.has_preedit()) {
+    if (piece_candidates.empty() && scratch.has_preedit()) {
       std::string unused_key;
       std::string value;
       ExtractPreeditKeyAndValue(scratch.preedit(), &unused_key, &value);
-      if (!value.empty()) piece_options.push_back(value);
+      if (!value.empty()) {
+        piece_candidates.push_back(PieceCandidate{std::move(value), false});
+      }
     }
-    if (piece_options.empty()) continue;
+    if (piece_candidates.empty()) continue;
 
-    piece_options_cache_[pieces[i].kana] = piece_options;
-    options[i] = std::move(piece_options);
+    OrderedPieceCandidates ordered = OrderPieceCandidates(piece_candidates);
+    if (ordered.surfaces.empty()) continue;
+
+    piece_options_cache_[pieces[i].kana] = ordered;
+    options[i] = std::move(ordered.surfaces);
+    if (typo_corrections != nullptr) {
+      (*typo_corrections)[i] = ordered.typo_correction;
+    }
   }
   return options;
 }
@@ -5408,9 +5471,13 @@ bool Session::RebuildMeltypePiecePlan(const std::string& raw, bool final) {
     return false;
   }
 
+  std::vector<bool> typo_corrections;
   const std::vector<std::vector<std::string>> options =
-      CollectMozcPieceOptions(pieces);
-  meltype_piece_plan_ = BuildPiecePlan(pieces, options);
+      CollectMozcPieceOptions(pieces, &typo_corrections);
+  meltype_piece_plan_ = BuildPiecePlan(pieces, options, typo_corrections);
+  // Mozc's own "もしかして" for a piece is promoted to that piece's first
+  // candidate, so the display shows the corrected reading at 0ms instead of
+  // the mis-conversion, and SystemOne sees it as the natural baseline.
   meltype_piece_choices_.assign(pieces.size(), std::string());
 
   for (const PieceQuestion& question : meltype_piece_plan_.questions) {
@@ -5426,6 +5493,11 @@ bool Session::RebuildMeltypePiecePlan(const std::string& raw, bool final) {
       piece_choice_cache_.erase(chosen);
     }
   }
+
+  // A piece without a proven SystemOne answer but with Mozc's typo
+  // correction keeps that correction on screen (and in the commit).
+  meltype_piece_choices_ =
+      ResolvePieceDisplayChoices(meltype_piece_plan_, meltype_piece_choices_);
   return true;
 }
 

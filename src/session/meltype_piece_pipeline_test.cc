@@ -453,6 +453,146 @@ TEST(MeltypePieceProtectionTest, EdgeSpacesFollowEnglishBoundaryRule) {
   EXPECT_EQ(JoinValues(trailing), "きょうは google");
 }
 
+// ---------------------------------------------------------------------------
+// Mozc's own typo correction ("もしかして").
+//
+// The correction is promoted only when Mozc itself produced it for the
+// piece's reading; nothing here invents a surface.
+// ---------------------------------------------------------------------------
+
+TEST(MeltypePieceTypoCorrectionTest, CorrectionIsPromotedToFirstOption) {
+  // "odosan" is a mis-reading of "お土産" (おみやげ); Mozc puts the correction
+  // at index 5, so the promotion has to move it, not just keep it.
+  const OrderedPieceCandidates ordered = OrderPieceCandidates({
+      {"脅さん", false},
+      {"おどさん", false},
+      {"小戸産", false},
+      {"小戸山", false},
+      {"小渡さん", false},
+      {"お土産", true},
+      {"おドサン", false},
+  });
+  ASSERT_FALSE(ordered.surfaces.empty());
+  EXPECT_EQ(ordered.surfaces.front(), "お土産");
+  EXPECT_TRUE(ordered.typo_correction);
+  // Mozc's own order survives behind it, and nothing is added or dropped.
+  EXPECT_EQ(ordered.surfaces,
+            (std::vector<std::string>{"お土産", "脅さん", "おどさん",
+                                      "小戸産", "小戸山", "小渡さん",
+                                      "おドサン"}));
+}
+
+TEST(MeltypePieceTypoCorrectionTest, NoCorrectionKeepsMozcOrder) {
+  const OrderedPieceCandidates ordered = OrderPieceCandidates({
+      {"環境", false},
+      {"カンキョウ", false},
+  });
+  EXPECT_EQ(ordered.surfaces,
+            (std::vector<std::string>{"環境", "カンキョウ"}));
+  EXPECT_FALSE(ordered.typo_correction);
+}
+
+TEST(MeltypePieceTypoCorrectionTest, EmptyInputStaysEmpty) {
+  const OrderedPieceCandidates ordered = OrderPieceCandidates({});
+  EXPECT_TRUE(ordered.surfaces.empty());
+  EXPECT_FALSE(ordered.typo_correction);
+}
+
+TEST(MeltypePieceTypoCorrectionTest, CorrectionAlreadyFirstIsNotDuplicated) {
+  // "ふいんき" is corrected to "雰囲気", which Mozc already ranks first.
+  const OrderedPieceCandidates ordered = OrderPieceCandidates({
+      {"雰囲気", true},
+      {"フインキ", false},
+  });
+  EXPECT_EQ(ordered.surfaces, (std::vector<std::string>{"雰囲気", "フインキ"}));
+  EXPECT_TRUE(ordered.typo_correction);
+}
+
+TEST(MeltypePieceTypoCorrectionTest, PlanBaselineIsTheCorrection) {
+  // The screen at 0ms is the plan's baseline value, so the correction has to
+  // be that value — not Mozc's own first candidate.
+  const PiecePlan plan =
+      BuildPiecePlan({Ja("odosan", "おどさん")},
+                     {{"お土産", "脅さん", "おどさん"}}, {true});
+  ASSERT_EQ(plan.segments.size(), 1u);
+  EXPECT_EQ(plan.segments[0].value, "お土産");
+  ASSERT_EQ(plan.questions.size(), 1u);
+  EXPECT_TRUE(plan.questions[0].typo_correction);
+  EXPECT_EQ(plan.questions[0].options.front(), "お土産");
+}
+
+TEST(MeltypePieceTypoCorrectionTest, DisplayChoiceUsesCorrectionWithoutAnswer) {
+  const PiecePlan plan =
+      BuildPiecePlan({Ja("odosan", "おどさん")},
+                     {{"お土産", "脅さん"}}, {true});
+  // No SystemOne answer yet: the correction is what the piece displays.
+  const std::vector<std::string> choices =
+      ResolvePieceDisplayChoices(plan, {""});
+  ASSERT_EQ(choices.size(), 1u);
+  EXPECT_EQ(choices[0], "お土産");
+}
+
+TEST(MeltypePieceTypoCorrectionTest, SystemOneAnswerBeatsTheCorrection) {
+  const PiecePlan plan =
+      BuildPiecePlan({Ja("odosan", "おどさん")},
+                     {{"お土産", "脅さん"}}, {true});
+  // The model saw the correction as an option and chose otherwise: its answer
+  // wins, otherwise the question would be pointless.
+  const std::vector<std::string> choices =
+      ResolvePieceDisplayChoices(plan, {"脅さん"});
+  ASSERT_EQ(choices.size(), 1u);
+  EXPECT_EQ(choices[0], "脅さん");
+}
+
+TEST(MeltypePieceTypoCorrectionTest, NoCorrectionLeavesMozcBaseline) {
+  const PiecePlan plan =
+      BuildPiecePlan({Ja("kannkyou", "かんきょう")},
+                     {{"環境", "カンキョウ"}});
+  const std::vector<std::string> choices =
+      ResolvePieceDisplayChoices(plan, {""});
+  ASSERT_EQ(choices.size(), 1u);
+  // "" means "keep Mozc's own multi-clause baseline on screen".
+  EXPECT_TRUE(choices[0].empty());
+}
+
+TEST(MeltypePieceTypoCorrectionTest, CorrectionCollapsesThePieceOnScreen) {
+  // The protection overlay only rewrites a piece when it carries a choice, so
+  // the promotion reaches the screen through this path: Mozc's mis-converted
+  // "おどさん" must become "お土産".
+  const std::vector<PieceSegment> baseline = {Mozc("おどさん", "おどさん")};
+  const std::vector<Segment> pieces = {Ja("odosan", "おどさん")};
+  const PiecePlan plan =
+      BuildPiecePlan(pieces, {{"お土産", "おどさん"}}, {true});
+  const std::vector<std::string> choices =
+      ResolvePieceDisplayChoices(plan, {""});
+
+  const std::vector<PieceSegment> protected_segments =
+      ProtectSegmentsWithPieces(baseline, pieces, choices);
+  ASSERT_EQ(protected_segments.size(), 1u);
+  EXPECT_EQ(JoinValues(protected_segments), "お土産");
+  // The reading is untouched: only the surface changes.
+  EXPECT_EQ(JoinKeys(protected_segments), "おどさん");
+}
+
+TEST(MeltypePieceTypoCorrectionTest, CorrectionInsideAJapaneseSentence) {
+  // Only the corrected piece changes; the other Japanese clauses stay Mozc's.
+  const std::vector<Segment> pieces = {Ja("kyouha", "きょうは"),
+                                       Ja("odosan", "おどさん"),
+                                       Ja("datta", "だった")};
+  const std::vector<PieceSegment> baseline = {Mozc("きょうは", "今日は"),
+                                             Mozc("おどさん", "おどさん"),
+                                             Mozc("だった", "だった")};
+  const PiecePlan plan =
+      BuildPiecePlan(pieces, {{"今日は"}, {"お土産", "おどさん"}, {"だった"}},
+                     {false, true, false});
+  const std::vector<std::string> choices =
+      ResolvePieceDisplayChoices(plan, {"", "", ""});
+
+  const std::vector<PieceSegment> protected_segments =
+      ProtectSegmentsWithPieces(baseline, pieces, choices);
+  EXPECT_EQ(JoinValues(protected_segments), "今日はお土産だった");
+}
+
 }  // namespace
 }  // namespace session
 }  // namespace mozc

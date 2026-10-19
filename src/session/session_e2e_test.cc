@@ -82,6 +82,9 @@
 
 namespace {
 
+using mozc::session::OrderPieceCandidates;
+using mozc::session::OrderedPieceCandidates;
+using mozc::session::PieceCandidate;
 using mozc::session::PiecePlan;
 using mozc::session::PieceQuestion;
 using mozc::session::PieceSegment;
@@ -226,6 +229,12 @@ struct PipelineCase {
   // Alignment-refusal cases keep Mozc's baseline on purpose — the English
   // letters are expected to be absent there.
   bool skip_english_check = false;
+  // Parallel to |candidates| and optional: a non-empty entry names the surface
+  // Mozc itself marked as its typo correction ("もしかして") for that piece's
+  // reading — the list stays exactly what Mozc returns, correction in its real
+  // position.  The pipeline promotes it, so the case proves the screen and the
+  // commit show the correction with nobody choosing anything.
+  std::vector<std::string> typo_corrections;
 };
 
 struct PipelineResult {
@@ -262,14 +271,32 @@ PipelineResult RunPipeline(const ScoredSegmenter& segmenter,
       segmenter.SegmentInput(test_case.romaji, ScoredSegmenter::Options{});
 
   // Stage 3: candidates per piece; English pieces get (and need) none.
+  // Mozc's typo correction is ordered first here, exactly as the Session's
+  // CollectMozcPieceOptions() does it, so the baseline and the options the
+  // model sees are the production ones.
   std::vector<std::vector<std::string>> options(spans.size());
+  std::vector<bool> typo_corrections(spans.size(), false);
   for (std::size_t i = 0; i < spans.size(); ++i) {
     if (spans[i].is_english) continue;
-    if (i < test_case.candidates.size()) options[i] = test_case.candidates[i];
+    if (i >= test_case.candidates.size()) continue;
+    const std::string correction =
+        i < test_case.typo_corrections.size() ? test_case.typo_corrections[i]
+                                              : std::string();
+    std::vector<PieceCandidate> candidates;
+    candidates.reserve(test_case.candidates[i].size());
+    for (const std::string& surface : test_case.candidates[i]) {
+      // Only the surface the case names is Mozc's correction; the rest are
+      // Mozc's ordinary conversions in Mozc's own order.
+      const bool is_correction = !correction.empty() && surface == correction;
+      candidates.push_back(PieceCandidate{surface, is_correction});
+    }
+    const OrderedPieceCandidates ordered = OrderPieceCandidates(candidates);
+    options[i] = ordered.surfaces;
+    typo_corrections[i] = ordered.typo_correction;
   }
 
   // Stage 4: the question plan (per-piece baselines and left contexts).
-  result.plan = mozc::session::BuildPiecePlan(spans, options);
+  result.plan = mozc::session::BuildPiecePlan(spans, options, typo_corrections);
 
   std::vector<std::string> choices(spans.size());
   if (test_case.systemone) {
@@ -332,13 +359,16 @@ PipelineResult RunPipeline(const ScoredSegmenter& segmenter,
   }
 
   // Stage 6: the screen and the commit are Mozc's own baseline with the
-  // English protection (and any answer) overlaid.
+  // English protection (and any answer) overlaid.  A piece Mozc corrected
+  // shows the correction even with no answer — that is the promotion.
   std::vector<PieceSegment> baseline_segments;
   for (const auto& [key, value] : test_case.baseline) {
     baseline_segments.push_back(PieceSegment{key, value});
   }
+  const std::vector<std::string> display_choices =
+      mozc::session::ResolvePieceDisplayChoices(result.plan, choices);
   result.protected_segments = mozc::session::ProtectSegmentsWithPieces(
-      baseline_segments, spans, choices);
+      baseline_segments, spans, display_choices);
   return result;
 }
 
@@ -787,6 +817,41 @@ int main() {
           {},
           "未提示の surface は拒否される",
       },
+      // ---- タイポ補正 ("もしかして") の自動昇格 ----
+      // odosan は お土産 (おみやげ) の誤読。Mozc は補正候補を6番目にしか
+      // 出さず、画面は壊れた表記 おどさん のままだった。補正候補が辞書
+      // 候補のどこにいても第1候補へ昇格し、画面も確定も自動で直る。
+      // SystemOne OFF = ネットワーク0回でも 0ms で直ることの証明。
+      {
+          "odosan",
+          {{"おどさん", "おどさん"}},
+          {{"脅さん", "おどさん", "小戸産", "小戸山", "小渡さん",
+            "お土産", "おドサン"}},
+          /*systemone=*/false,
+          {},
+          "お土産",
+          {},
+          {},
+          "タイポ補正が第1候補へ昇格 (SystemOne OFF でも画面・確定が直る)",
+          /*skip_english_check=*/false,
+          {"お土産"},
+      },
+      // 補正候補を提示された SystemOne が別の surface を選んだら、その
+      // 回答が勝つ (昇格はあくまでベースラインであって決定ではない)。
+      {
+          "odosan",
+          {{"おどさん", "おどさん"}},
+          {{"脅さん", "おどさん", "小戸産", "小渡さん", "お土産"}},
+          /*systemone=*/true,
+          {"脅さん"},
+          "脅さん",
+          {},
+          {},
+          "補正候補より SystemOne の回答が優先される",
+          /*skip_english_check=*/false,
+          {"お土産"},
+      },
+
       // ---- [修正検証] 英字保護が失敗していた全ローマ字の回帰ケース ----
       // 根本原因1: Mozc が辞書にない長い語を複数セグメントに細切れ
       // (facebook → ふぁせぼ + おk)。英語ピースが所有するセグメントは
