@@ -57,8 +57,8 @@
     http://msdn.microsoft.com/en-us/library/aa367850.aspx.
     So we change the product ID for every new version.
   -->
-  <Package Name="JustType" Language="1041" Codepage="932" Version="$(var.MozcVersion)" Manufacturer="koyasi777" UpgradeCode="$(var.UpgradeCode)" InstallerVersion="500" Scope="perMachine">
-    <SummaryInformation Keywords="Installer" Description="JustType インストーラー" Manufacturer="koyasi777" Codepage="932" />
+  <Package Name="JustType" Language="1041" Codepage="932" Version="$(var.MozcVersion)" Manufacturer="YoshiaKefasu" UpgradeCode="$(var.UpgradeCode)" InstallerVersion="500" Scope="perMachine">
+    <SummaryInformation Keywords="Installer" Description="JustType インストーラー" Manufacturer="YoshiaKefasu" Codepage="932" />
 
     <!--
        While obtaining the OS build number from the registry does not seem to be officially

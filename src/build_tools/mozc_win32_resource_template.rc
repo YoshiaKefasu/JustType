@@ -6,7 +6,7 @@
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_COMPANY_NAME "Google LLC"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_COMPANY_NAME "koyasi777"
+    #define MOZC_RES_COMPANY_NAME "YoshiaKefasu"
   #endif
 #endif
 #ifndef MOZC_RES_FILE_DESCRIPTION
@@ -19,7 +19,7 @@
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_LEGAL_COPYRIGHT "Copyright 2026 Google LLC. All Rights Reserved."
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_LEGAL_COPYRIGHT "Copyright 2026 koyasi777. Portions Copyright Google LLC."
+    #define MOZC_RES_LEGAL_COPYRIGHT "Copyright 2026 YoshiaKefasu. Portions Copyright 2010-2026 Google LLC."
   #endif
 #endif
 #ifndef MOZC_RES_ORIGINAL_FILENAME

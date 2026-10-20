@@ -562,8 +562,8 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>システムOne 補正が実行される場合、補正結果が確定するまで通常の Mozc ライブ変換結果を表示しません。システムOne が採用されなかった場合は Mozc 結果を表示します。</source>
-        <translation>When システムOne correction runs, keep the previous preedit visible until the correction finishes. If システムOne is not adopted, show the Mozc result.</translation>
+        <source>システムOne 補正が実行される場合、補正結果が確定するまで通常のライブ変換結果を表示しません。システムOne が採用されなかった場合は通常の変換結果を表示します。</source>
+        <translation>When システムOne correction runs, keep the previous preedit visible until the correction finishes. If システムOne is not adopted, show the normal conversion result.</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -572,8 +572,8 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>「通常のライブ変換結果を表示しない」が有効な場合、システムOne 補正要求の送信後、この時間以内に結果が返らなければ、その回の システムOne 補正を中止して通常の Mozc ライブ変換結果を表示します。</source>
-        <translation>When deferred presentation is enabled, if no システムOne result is available within this time after the correction request is submitted, cancel システムOne for that input and show the normal Mozc live-conversion result.</translation>
+        <source>「通常のライブ変換結果を表示しない」が有効な場合、システムOne 補正要求の送信後、この時間以内に結果が返らなければ、その回の システムOne 補正を中止して通常のライブ変換結果を表示します。</source>
+        <translation>When deferred presentation is enabled, if no システムOne result is available within this time after the correction request is submitted, cancel システムOne for that input and show the normal live-conversion result.</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -617,13 +617,13 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>例: Mozc、Rust、会計、法律。空欄なら送信しません。</source>
-        <translation>Example: Mozc, Rust, accounting, law. Empty values are not sent.</translation>
+        <source>例: JustType、Rust、会計、法律。空欄なら送信しません。</source>
+        <translation>Example: JustType, Rust, accounting, law. Empty values are not sent.</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>例: Mozc</source>
-        <translation>Example: Mozc</translation>
+        <source>例: JustType</source>
+        <translation>Example: JustType</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -707,8 +707,8 @@
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
-        <source>同じ読み・同じ文脈クラス・同じ システムOne 補正について、拒否回数と拒否割合の両方が設定値以上になった場合に表示を抑制します。自動ブロック中も システムOne の内部生成と最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。通常の Mozc 候補から削除する機能ではありません。</source>
-        <translation>For the same reading, context class, and システムOne correction, suppress display when both the reject count and reject percentage meet or exceed the configured thresholds. While auto-blocked, システムOne continues generating corrections internally and compares them with the final committed text; if matching observations increase and the reject percentage falls, the block is removed automatically. This does not remove candidates from normal Mozc conversion.</translation>
+        <source>同じ読み・同じ文脈クラス・同じ システムOne 補正について、拒否回数と拒否割合の両方が設定値以上になった場合に表示を抑制します。自動ブロック中も システムOne の内部生成と最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。通常の変換候補から削除する機能ではありません。</source>
+        <translation>For the same reading, context class, and システムOne correction, suppress display when both the reject count and reject percentage meet or exceed the configured thresholds. While auto-blocked, システムOne continues generating corrections internally and compares them with the final committed text; if matching observations increase and the reject percentage falls, the block is removed automatically. This does not remove candidates from normal conversion.</translation>
     </message>
     <message>
         <location filename="config_dialog.ui" line="0"/>
@@ -1107,7 +1107,7 @@
     </message>
     <message>
         <location filename="config_dialog.cc" line="718"/>
-        <source>This operation clears Mozc conversion learning, including learning reflected from accepted システムOne results. Input history data and システムOne学習 data itself are not cleared. To remove input history data, use &quot;Suggestion&quot; -&gt; &quot;Clear all history&quot;. To manage システムOne学習 data, use &quot;Advanced&quot; -&gt; &quot;システムOne Learning&quot;. Do you want to continue?</source>
+        <source>This operation clears JustType conversion learning, including learning reflected from accepted システムOne results. Input history data and システムOne学習 data itself are not cleared. To remove input history data, use &quot;Suggestion&quot; -&gt; &quot;Clear all history&quot;. To manage システムOne学習 data, use &quot;Advanced&quot; -&gt; &quot;システムOne Learning&quot;. Do you want to continue?</source>
         <translation></translation>
     </message>
     <message>
