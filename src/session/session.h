@@ -295,6 +295,11 @@ class Session {
   struct PassiveSuggestionSnapshot {
     commands::CandidateWindow candidate_window;
     std::unique_ptr<ImeContext> context;
+    // The prediction query that actually produced |candidate_window|.  It is
+    // captured before the snapshot Composer is advanced to the user's newer
+    // input, so it keeps the provenance of the candidate IDs.  A held list may
+    // only be promoted while this still matches the live Composer query.
+    std::string suggestion_query;
   };
 
   // One continuation per IME session. Invalidated on every physical key.
@@ -309,6 +314,11 @@ class Session {
   // True only while ordinary composition is displaying a passive suggestion
   // that was intentionally held across unresolved trailing Roman input.
   bool composition_holds_passive_suggestion_ = false;
+
+  // The prediction query that produced the currently held composition
+  // suggestion.  Promotion must not reuse a list whose query no longer matches
+  // the Composer ("で" suggestions after the user typed "できます").
+  std::string composition_holds_passive_suggestion_query_;
 
   // True while the current CONVERSION state was started by live conversion.
   // In this mode, ordinary character input should keep editing the underlying
@@ -346,6 +356,9 @@ class Session {
   // snapshots and must never share ownership implicitly.
   std::unique_ptr<ImeContext> pending_live_conversion_suggestion_context_;
 
+  // Prediction query that produced the pending suggestion window above.
+  std::string pending_live_conversion_suggestion_query_;
+
   // True when the delayed live-conversion request was scheduled from a
   // physical lower-case Roman key whose unresolved suffix must keep the
   // previously visible passive suggestion instead of refreshing prediction.
@@ -367,6 +380,11 @@ class Session {
   // Candidate IDs in that window belong to this converter state, not to the
   // real live-conversion converter which intentionally remains in CONVERSION.
   std::unique_ptr<ImeContext> live_conversion_suggestion_context_;
+
+  // Prediction query that produced the active live-conversion suggestion
+  // window above.  Recorded at generation time because AttachPassiveSuggestion
+  // Snapshot() advances the snapshot Composer to the user's newer input.
+  std::string live_conversion_suggestion_query_;
 
   // True only when the active live-conversion passive suggestion is an exact
   // held snapshot from before the current unresolved Roman suffix.
@@ -521,8 +539,10 @@ class Session {
     std::optional<PendingLiveConversionPresentation> pending_presentation;
     commands::CandidateWindow pending_suggestion_candidate_window;
     std::unique_ptr<ImeContext> pending_suggestion_context;
+    std::string pending_suggestion_query;
     commands::CandidateWindow live_suggestion_candidate_window;
     std::unique_ptr<ImeContext> live_suggestion_context;
+    std::string live_suggestion_query;
     std::string live_key;
     std::string live_preedit;
     std::string live_value;

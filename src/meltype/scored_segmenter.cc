@@ -518,6 +518,18 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
     }
     if (has_upper && !dictionaries_.proper.ContainsWord(lower)) return false;
   }
+  // 促音の境界 (この区間の末尾の子音と、すぐ次の文字が同じ) は、英語の区間を
+  // 日本語の促音「っ」に潰す結合をここで止める。英単語 (tab) の後ろに日本語
+  // (botan) が続いても、tab + botan = たっぼたん にはしない。
+  // ただし、重なりが日本語の語の続き (kitt + e = きって, bagg + u = ばっぐ のような
+  // 日本語の促音) なら、日本語として読む。日本語の促音は有声子音 (b, d, g, z, j) でも
+  // 生じる (バッグ・ベッド・グッズ) ので、子音の種類では判定しない。
+  if (next && ToLowerAscii(*next) == lower.back() &&
+      (dictionaries_.english.ContainsWord(lower) ||
+       dictionaries_.proper.ContainsWord(lower)) &&
+      !dictionaries_.japanese.HasPrefix(lower + ToLowerAscii(*next))) {
+    return true;
+  }
   // 短い区間の最後の子音が、次の音と合わせて っ になる (u|lo|t + ti = ぉっち) なら、
   // 英単語 (lot) ではなく日本語の途中。
   if (lower.size() <= 4 && next && ToLowerAscii(*next) == lower.back() &&
@@ -712,9 +724,20 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
   if (spell_word && !in_dictionary && analysis.is_valid && analysis.partial.empty()) {
     required = std::max(required, 2);
   }
+  // 英単語の末尾と、この区間の頭が同じ文字 (tab|botan の bb) なら、それは
+  // 日本語の促音の綴り (っ) であって英語 2 語の並びではない。前が英語でも
+  // 文脈として数えない (tab が botan を英語に引き込むのを防ぐ)。
+  const std::size_t span_begin =
+      static_cast<std::size_t>(span.data() - input_.data());
+  const bool doubled_letter_junction =
+      span_begin > 0 &&
+      ToLowerAscii(input_[span_begin - 1]) == ToLowerAscii(span.front());
+  const int before_context = doubled_letter_junction ? 0 : before;
   // 前が英文でも、後ろが日本語なら英文の強さは数えない (I love |sushi| が好き)。
   if (ambiguous &&
-      (after.has_value() && !*after ? std::min(before, 1) : before) + Score(after) >= required) {
+      (after.has_value() && !*after ? std::min(before_context, 1) : before_context) +
+              Score(after) >=
+          required) {
     return true;
   }
   if (!exact && !prefix && !spell_word) return false;

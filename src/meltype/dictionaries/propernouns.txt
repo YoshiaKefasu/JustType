@@ -169,6 +169,7 @@ Sublime
 Svelte
 Swedish
 Swift
+Tab
 Telegram
 Tensorflow
 Tesla

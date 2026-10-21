@@ -208,6 +208,42 @@ int main() {
   Expect("日本語だけ", "konnnichiha", Final(), "JA:こんにちは");
   Expect("記号つき英文", "hello, world!", Final(), "EN:hello, world!");
 
+  std::cout << "\n[7] 促音の境界 (英単語 + 日本語の促音)\n";
+  // 英単語の末尾と次の文字が同じ子音でも、日本語の促音「っ」に潰さず、
+  // 英単語と日本語に切り分ける (tab + botan = たっぼたん にしない)。
+  Expect("Tab + ボタン", "tabbotan", Final(), "EN:tab|JA:ぼたん");
+  Expect("Tab + ボタンを", "tabbotanwo", Final(), "EN:tab|JA:ぼたんを");
+  Expect("文中の Tab + ボタン", "kyouhatabbotanwoosita", Final(),
+         "JA:きょうは|EN:tab|JA:ぼたんをおした");
+  Expect("Tab + を + ボタン", "tabwobotan", Final(), "EN:tab|JA:をぼたん");
+
+  // 英単語に直接続く日本語の促音の接尾辞・助詞は壊さない (§32§)。
+  Expect("apple って", "applette", Final(), "EN:apple|JA:って");
+  Expect("minute って", "minutette", Final(), "EN:minute|JA:って");
+  Expect("hacker っぽい", "hackerppoi", Final(), "EN:hacker|JA:っぽい");
+  Expect("minute っていう", "minutetteiuego", Final(),
+         "EN:minute|JA:っていうえご");
+  Expect("batman って", "batmantte", Final(), "EN:batman|JA:って");
+
+  // 日本語の促音 (有声子音でも生じる外来語を含む) はそのまま読む。
+  Expect("バッグ (有声促音)", "baggu", Final(), "JA:ばっぐ");
+  Expect("ベッド (有声促音)", "beddo", Final(), "JA:べっど");
+  Expect("グッズ (有声促音)", "guzzu", Final(), "JA:ぐっず");
+  Expect("ドッグ (有声促音)", "doggu", Final(), "JA:どっぐ");
+  Expect("キッズ (有声促音)", "kizzu", Final(), "JA:きっず");
+  Expect("バッジ (有声促音)", "pajji", Final(), "JA:ぱっじ");
+  Expect("きって", "kitte", Final(), "JA:きって");
+  Expect("きってください", "kittekudasai", Final(), "JA:きってください");
+  Expect("がっこう", "gakkou", Final(), "JA:がっこう");
+  Expect("やっぱり", "yappari", Final(), "JA:やっぱり");
+  Expect("まったく", "mattaku", Final(), "JA:まったく");
+  Expect("ずっと", "zutto", Final(), "JA:ずっと");
+  Expect("にっぽん", "nippon", Final(), "JA:にっぽん");
+  Expect("はっぴょう", "happyou", Final(), "JA:はっぴょう");
+  Expect("けっか", "kekka", Final(), "JA:けっか");
+  Expect("っちゃうってっぽい", "cchautteppoi", Final(),
+         "JA:っちゃうってっぽい");
+
   RomajiDetectorTests();
 
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"

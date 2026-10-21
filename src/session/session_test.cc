@@ -123,8 +123,14 @@ class SessionTestPeer : testing::TestPeer<Session> {
   PEER_VARIABLE(pending_live_conversion_presentation_);
   PEER_VARIABLE(pending_live_conversion_suggestion_candidate_window_);
   PEER_VARIABLE(pending_live_conversion_suggestion_context_);
+  PEER_VARIABLE(pending_live_conversion_suggestion_query_);
   PEER_VARIABLE(live_conversion_suggestion_candidate_window_);
   PEER_VARIABLE(live_conversion_suggestion_context_);
+  PEER_VARIABLE(live_conversion_suggestion_query_);
+  PEER_VARIABLE(composition_holds_passive_suggestion_);
+  PEER_VARIABLE(composition_holds_passive_suggestion_query_);
+  PEER_VARIABLE(live_conversion_holds_passive_suggestion_);
+  PEER_VARIABLE(pending_live_conversion_holds_passive_suggestion_);
   PEER_VARIABLE(pending_direct_commit_learning_);
   PEER_VARIABLE(pending_command_sequence_);
   PEER_VARIABLE(command_sequence_generation_);
@@ -2040,6 +2046,10 @@ TEST_F(
       std::move(session_peer.live_conversion_suggestion_candidate_window_());
   session_peer.pending_live_conversion_suggestion_context_() =
       std::move(session_peer.live_conversion_suggestion_context_());
+  // The provenance of the candidate IDs travels with them: without it the
+  // pending list can never be promoted (fail-closed by design).
+  session_peer.pending_live_conversion_suggestion_query_() =
+      std::move(session_peer.live_conversion_suggestion_query_());
 
   ASSERT_NE(
       session_peer.pending_live_conversion_suggestion_context_().get(),
@@ -2295,6 +2305,128 @@ TEST_F(SessionTest, TabDuringLiveConversionFocusesPredictionCandidates) {
   ASSERT_TRUE(command.output().candidate_window().has_focused_index());
   EXPECT_EQ(command.output().candidate_window().focused_index(), 0);
   EXPECT_PREEDIT("ありがとう", command);
+}
+
+TEST_F(SessionTest,
+       TabAfterTypingOnDoesNotPromoteHeldCompositionSuggestionOfOlderQuery) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  SessionTestPeer session_peer(session);
+  InitSessionToPrecomposition(&session);
+
+  config::Config config;
+  config::ConfigHandler::GetDefaultConfig(&config);
+  config.set_use_live_conversion(false);
+  config.set_session_keymap(config::Config::MSIME);
+  session.SetConfig(config);
+
+  // Build the composition "できます".
+  EXPECT_CALL(*converter, StartPrediction(_, _)).WillRepeatedly(Return(false));
+  commands::Command command;
+  InsertCharacterString("できます", "dekimasu", &session, &command);
+  ASSERT_EQ(session.context().composer().GetQueryForConversion(), "できます");
+  Mock::VerifyAndClearExpectations(converter.get());
+
+  // Model the zombie state: the Session believes it is holding a passive
+  // suggestion that was generated for the older query "で".  The held list
+  // itself is still visible in the converter.
+  Segments held_segments;
+  Segment* held_segment = held_segments.add_segment();
+  held_segment->set_key("で");
+  AddCandidate("で", "です", held_segment);
+  AddCandidate("で", "でどう", held_segment);
+  AddCandidate("で", "でしょ", held_segment);
+
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .Times(1)
+      .WillOnce(DoAll(SetArgPointee<1>(held_segments), Return(true)));
+  ASSERT_TRUE(session_peer.context_()->mutable_converter()->Suggest(
+      session_peer.context_()->composer(),
+      commands::Context::default_instance()));
+  Mock::VerifyAndClearExpectations(converter.get());
+
+  session_peer.composition_holds_passive_suggestion_() = true;
+  session_peer.composition_holds_passive_suggestion_query_() = "で";
+
+  // Tab must not promote the stale "で" list: the query recorded with the held
+  // list ("で") no longer matches the Composer ("できます"), so the ordinary
+  // prediction path runs for the current reading instead.
+  Segments fresh_segments;
+  Segment* fresh_segment = fresh_segments.add_segment();
+  fresh_segment->set_key("できます");
+  AddCandidate("できます", "出来ます", fresh_segment);
+  AddCandidate("できます", "できます", fresh_segment);
+
+  EXPECT_CALL(*converter, StartPredictionWithPreviousSuggestion(_, _, _))
+      .Times(1)
+      .WillOnce(DoAll(SetArgPointee<2>(fresh_segments), Return(true)));
+
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::TAB, &session, &command));
+
+  EXPECT_EQ(session.context().state(), ImeContext::CONVERSION);
+  ASSERT_TRUE(command.output().has_candidate_window());
+  ASSERT_GT(command.output().candidate_window().candidate_size(), 0);
+  EXPECT_EQ(command.output().candidate_window().candidate(0).value(),
+            "出来ます");
+  // The held flag is consumed; the stale list must not survive as "held".
+  EXPECT_FALSE(session_peer.composition_holds_passive_suggestion_());
+  EXPECT_TRUE(session_peer.composition_holds_passive_suggestion_query_().empty());
+}
+
+TEST_F(SessionTest,
+       TabAfterTypingOnPromotesHeldCompositionSuggestionForMatchingQuery) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  SessionTestPeer session_peer(session);
+  InitSessionToPrecomposition(&session);
+
+  config::Config config;
+  config::ConfigHandler::GetDefaultConfig(&config);
+  config.set_use_live_conversion(false);
+  config.set_session_keymap(config::Config::MSIME);
+  session.SetConfig(config);
+
+  EXPECT_CALL(*converter, StartPrediction(_, _)).WillRepeatedly(Return(false));
+  commands::Command command;
+  InsertCharacterString("できます", "dekimasu", &session, &command);
+  ASSERT_EQ(session.context().composer().GetQueryForConversion(), "できます");
+  Mock::VerifyAndClearExpectations(converter.get());
+
+  Segments held_segments;
+  Segment* held_segment = held_segments.add_segment();
+  held_segment->set_key("できます");
+  AddCandidate("できます", "出来ます", held_segment);
+  AddCandidate("できます", "できます", held_segment);
+
+  EXPECT_CALL(*converter, StartPrediction(_, _))
+      .Times(1)
+      .WillOnce(DoAll(SetArgPointee<1>(held_segments), Return(true)));
+  ASSERT_TRUE(session_peer.context_()->mutable_converter()->Suggest(
+      session_peer.context_()->composer(),
+      commands::Context::default_instance()));
+  Mock::VerifyAndClearExpectations(converter.get());
+
+  session_peer.composition_holds_passive_suggestion_() = true;
+  session_peer.composition_holds_passive_suggestion_query_() = "できます";
+
+  // A held list whose recorded query still matches is promoted as-is, without
+  // re-running prediction.
+  EXPECT_CALL(*converter, StartPredictionWithPreviousSuggestion(_, _, _))
+      .Times(0);
+
+  command.Clear();
+  EXPECT_TRUE(SendSpecialKey(commands::KeyEvent::TAB, &session, &command));
+
+  EXPECT_EQ(session.context().state(), ImeContext::CONVERSION);
+  ASSERT_TRUE(command.output().has_candidate_window());
+  EXPECT_EQ(command.output().candidate_window().candidate(0).value(),
+            "出来ます");
+  EXPECT_FALSE(session_peer.composition_holds_passive_suggestion_());
 }
 
 TEST_F(SessionTest,

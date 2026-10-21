@@ -688,6 +688,86 @@ int main() {
     ReportEq("nagainndato の区間分け (inn除外)", "JA:ながいんだと", rendered);
   }
 
+  // [回帰検証] 促音の境界 (英単語の末尾子音と次の文字が同じ) を跨いで
+  // 日本語の促音「っ」に潰さない。tab + botan = たっぼたん にしない。
+  {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput("tabbotan", ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq("tabbotan の区間分け (促音の境界を跨がない)",
+             "EN:tab|JA:ぼたん", rendered);
+  }
+  {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput("tabbotanwo", ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq("tabbotanwo の区間分け", "EN:tab|JA:ぼたんを", rendered);
+  }
+  {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput("kyouhatabbotanwoosita",
+                               ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq("kyouhatabbotanwoosita の区間分け",
+             "JA:きょうは|EN:tab|JA:ぼたんをおした", rendered);
+  }
+  // 英単語に直接続く日本語の促音の接尾辞・助詞は壊さない。
+  {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput("applette", ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq("applette の区間分け (apple + って)", "EN:apple|JA:って",
+             rendered);
+  }
+  {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput("hackerppoi", ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq("hackerppoi の区間分け (hacker + っぽい)",
+             "EN:hacker|JA:っぽい", rendered);
+  }
+  // 日本語の促音 (有声子音でも生じる外来語を含む) はそのまま読む。
+  {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput("baggu", ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq("baggu の区間分け (有声促音の外来語)", "JA:ばっぐ", rendered);
+  }
+  {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput("cchautteppoi", ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq("cchautteppoi の区間分け", "JA:っちゃうってっぽい", rendered);
+  }
+
 
   // -----------------------------------------------------------------------
   // [2] Mozc ベースライン + 英語ピース保護 & SystemOne & 確定: 一気通貫
