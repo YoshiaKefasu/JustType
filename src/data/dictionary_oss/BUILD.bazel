@@ -77,6 +77,36 @@ filegroup(
     visibility = ["//visibility:private"],
 )
 
+# The raw dictionary*.txt that //session:session_e2e_test reads to pin the
+# frequency-data repairs (ghost-kanji isolation, the お任せ override, and the
+# hiragana-first tier).
+#
+# Only the files carrying the readings that test checks are shipped: the full
+# set is 1.29M rows, and reading all ten pushed the test past its size="small"
+# budget.  The test discovers the files from this runfiles directory rather than
+# hardcoding a list, so this filegroup is the single source of truth -- if a
+# reading moves to a file that is not here, the test reports the missing lid
+# instead of silently passing.
+filegroup(
+    name = "cost_repair_test_data",
+    srcs = [
+        # お任せ / おまかせ (Rule K)
+        "dictionary00.txt",
+        "dictionary04.txt",
+        # わたし (hiragana tier)
+        "dictionary01.txt",
+        "dictionary09.txt",
+        # いう / いま (hiragana tier)
+        # はなし (hiragana tier)
+        "dictionary03.txt",
+        "dictionary06.txt",
+        "dictionary08.txt",
+        # 幽霊漢字 42 件 (Rule G)
+        "dictionary07.txt",
+    ],
+    visibility = ["//session:__pkg__"],
+)
+
 filegroup(
     name = "dictionary_data",
     srcs = [

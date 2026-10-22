@@ -1406,6 +1406,222 @@ int main() {
   }
 
   // -----------------------------------------------------------------------
+  // [6] 辞書: 頻度データで直した 3 つのことを固定する
+  //
+  // (a) 使役接尾辞パラダイムの幽霊漢字。id.def 488-543 の
+  //     動詞,接尾,*,*,五段・サ行 は本来かな書き (させる / さす / させ) なのに、
+  //     希少な漢字動詞 (剳す 扠す 扨す 箚す 點す 捺す の 6 語) が同じ表に
+  //     活用され、接尾辞側のほぼ 0 のコストを継いだ。その結果 `させ` の
+  //     候補が 剳せ (cost 0) や 捺せ (cost 24) で埋まっていた。
+  //     判別条件は「接尾辞パラダイム内の漢字表記で、その表記自身の読み
+  //     (パラダイム外) が key と連濁差以外で一致しないもの」。これで
+  //     掛かる (がかる / かかる = 連濁) や 付ける (づける / つける) のような
+  //     正当な接尾辞形を誤爆せず、6 語 x 7 活用形 = 42 件だけを捕捉できる。
+  //     コスト 16000 に引き上げてあるので、実候補がある限り出てこない。
+  //
+  // (b) お任せ のコスト上書き。これは近差タイブレークでは直らない。
+  //     辞書上の語コストは既に お任せ 1953 < おまかせ 3435 と正しい順序だが、
+  //     変換器は おまかせ を先に出していた。理由は語コストではなく左文脈
+  //     コスト: お任せ は lid 2597 (接頭詞,動詞接続)、おまかせ は lid 2601
+  //     (接頭詞,名詞接続) で、実測の連接オーバーヘッドはそれぞれ 4521 と
+  //     3037 -- お任せ が 1484 不利。語コスト差では埋まらないので、
+  //     お任せ の語コストを 200 に下げて合計で上回らせている。
+  //     JPDB (お任せ 3569 / おまかせ 21715) と YouTube (16883 / 26591) が
+  //     どちらも お任せ を支持する。
+  //
+  // (c) Mozc の意図的なひらがな優先層は壊していないこと。
+  //     わたし / いう / いま / はなし は Mozc があえてひらがなを最安に
+  //     している語で、周波数データで漢字へ動かしてはいけない。
+  //
+  // 注意: ここで見ているのは辞書の見出しコストであり、実変換の 1 位とは
+  // 一致しないことがある。変換結果は語コスト + 連接コスト + 文脈で決まる
+  // ため、たとえば わたし は辞書コスト 0 で最安だが、文脈によっては 私 が
+  // 1 位になる。実変換の検証は quality_regression と実機の変換結果が担う。
+  // -----------------------------------------------------------------------
+  std::cout << "\n[6] 辞書: 幽霊漢字の排除と お任せ のコスト上書き\n";
+  {
+    const std::filesystem::path dictionary_directory =
+        std::filesystem::absolute(__FILE__).parent_path().parent_path().append(
+            "data").append("dictionary_oss");
+
+    // dictionary*.txt を 1 つの行リストにする。どのファイルが runfiles に
+    // 入るかは //data/dictionary_oss:cost_repair_test_data が決める (フル
+    // 辞書は 129 万行あり、全部読むと size="small" の予算を超える)。
+    // ここではファイル名をハードコードせず、実際に届いたものだけを読む。
+    // 必要な読みが届いていなければ、下の lid 存在チェックが落ちる。
+    std::vector<std::filesystem::path> dictionary_files;
+    for (const auto& entry : std::filesystem::directory_iterator(
+             dictionary_directory)) {
+      const std::string name = entry.path().filename().string();
+      if (name.size() == 16 && name.starts_with("dictionary") &&
+          name.ends_with(".txt")) {
+        dictionary_files.push_back(entry.path());
+      }
+    }
+    std::sort(dictionary_files.begin(), dictionary_files.end());
+
+    std::vector<std::vector<std::string>> rows;
+    for (const std::filesystem::path& file : dictionary_files) {
+      std::ifstream input(file);
+      if (!input) continue;
+      std::string line;
+      while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        rows.push_back(SplitRow(line));
+      }
+    }
+    Report(!rows.empty(), "辞書ファイルが読める",
+           dictionary_directory.string() + " files=" +
+               std::to_string(dictionary_files.size()) + " rows=" +
+               std::to_string(rows.size()));
+
+    // (a) 幽霊漢字 42 件が接尾辞パラダイムの中でコスト 16000 に隔離され、
+    //     一つも漏れていないことを、実データの lid ごとすべて検証する。
+    //
+    //     42 = 6 漢字 (剳 扠 扨 箚 點 捺) x 7 活用形。lid は id.def の
+    //     使役接尾辞パラダイムで、活用形ごとに 6 語分の id が連番で並ぶ:
+    //
+    //       490-495  仮定形      させ / 剳せ 扠せ 扨せ 捺せ 箚せ 點せ
+    //       498-503  仮定縮約１  さしゃ / 剳しゃ 扠しゃ 扨しゃ 捺しゃ ...
+    //       506-511  命令ｅ      させ / 剳せ 扠せ 扨せ 捺せ 箚せ 點せ
+    //       514-519  基本形      さす / 剳す 扠す 扨す 捺す 箚す 點す
+    //       522-527  未然ウ接続  さそ / 剳そ 扠そ 扨そ 捺そ 箚そ 點そ
+    //       530-535  未然形      ささ / 剳さ 扠さ 扨さ 捺さ 箚さ 點さ
+    //       538-543  連用形      さし / 剳し 扠し 扨し 捺し 箚し 點し
+    //
+    //     期待するのは「これら 42 lid がすべて存在し、それぞれの漢字表記が
+    //     一つずつ 16000 以上であること」。存在確認も入れることで、将来
+    //     id.def が変わって検証対象が 0 件になった時に空振り PASS しない。
+    //     (実データは lid ごとに漢字表記が 1 件。捺せ など同じ表記が複数 lid
+    //      に出るが、それは別 lid として数える。)
+    const std::vector<int> ghost_lids = {
+        490, 491, 492, 493, 494, 495, 498, 499, 500, 501, 502, 503,
+        506, 507, 508, 509, 510, 511, 514, 515, 516, 517, 518, 519,
+        522, 523, 524, 525, 526, 527, 530, 531, 532, 533, 534, 535,
+        538, 539, 540, 541, 542, 543};
+    const std::vector<std::string> ghost_kanji = {
+        "剳", "扠", "扨", "捺", "箚", "點"};
+
+    std::map<int, int> ghost_count_by_lid;
+    int ghosts_isolated = 0;
+    int ghosts_leaking = 0;
+    std::string leak_detail;
+    for (const std::vector<std::string>& row : rows) {
+      if (row.size() < 5) continue;
+      const int lid = std::atoi(row[1].c_str());
+      if (std::find(ghost_lids.begin(), ghost_lids.end(), lid) ==
+          ghost_lids.end()) {
+        continue;
+      }
+      // 接尾辞パラダイムの漢字表記だけが対象。かな表記 (させ / さす) は
+      // 正規の接尾辞形なので数えない。
+      const std::string& value = row[4];
+      if (value.empty()) continue;
+      const std::string first_char = value.substr(0, 3);  // UTF-8 3 bytes
+      if (std::find(ghost_kanji.begin(), ghost_kanji.end(), first_char) ==
+          ghost_kanji.end()) {
+        continue;
+      }
+      ++ghost_count_by_lid[lid];
+      if (std::atoi(row[3].c_str()) >= 16000) {
+        ++ghosts_isolated;
+      } else {
+        ++ghosts_leaking;
+        if (leak_detail.empty()) {
+          leak_detail = "lid=" + row[1] + " key=" + row[0] + " cost=" +
+                        row[3] + " value=" + value;
+        }
+      }
+    }
+
+    // 42 個の lid すべてに漢字表記が存在するか (空振り PASS の防止)。
+    std::string missing_lids;
+    for (const int lid : ghost_lids) {
+      if (ghost_count_by_lid[lid] == 0) {
+        if (!missing_lids.empty()) missing_lids += ",";
+        missing_lids += std::to_string(lid);
+      }
+    }
+    Report(missing_lids.empty(),
+           "幽霊漢字の 42 lid すべてに漢字表記が存在する",
+           missing_lids.empty()
+               ? "lids=" + std::to_string(ghost_count_by_lid.size())
+               : "missing lids: " + missing_lids);
+
+    Report(ghosts_isolated == 42 && ghosts_leaking == 0,
+           "幽霊漢字 42 件すべてが接尾辞パラダイムで隔離されている",
+           "isolated=" + std::to_string(ghosts_isolated) +
+               " (expected 42) leaking=" + std::to_string(ghosts_leaking) +
+               " " + leak_detail);
+
+    // 42 lid がそれぞれちょうど 1 件ずつであること (重複や取りこぼしの検出)。
+    std::string wrong_count;
+    for (const int lid : ghost_lids) {
+      if (ghost_count_by_lid[lid] != 1) {
+        if (!wrong_count.empty()) wrong_count += ",";
+        wrong_count += std::to_string(lid) + "=" +
+                       std::to_string(ghost_count_by_lid[lid]);
+      }
+    }
+    Report(wrong_count.empty(),
+           "各 lid に漢字表記がちょうど 1 件ずつある",
+           wrong_count.empty() ? "42 lids x 1 = 42 rows" : wrong_count);
+
+    // (b) お任せ は おまかせ より安い (コスト上書きの結果)。
+    //     実測値: お任せ = 200, おまかせ = 3435。
+    //     単純な近差タイブレークでは直らない理由 (lid 2597 の連接コストが
+    //     lid 2601 より 1484 高い) はセクション冒頭のコメントを参照。
+    int omakase_cost = -1;
+    int onomakase_cost = -1;
+    for (const std::vector<std::string>& row : rows) {
+      if (row.size() < 5 || row[0] != "おまかせ") continue;
+      const int cost = std::atoi(row[3].c_str());
+      if (row[4] == "おまかせ") {
+        if (omakase_cost < 0 || cost < omakase_cost) omakase_cost = cost;
+      } else if (row[4] == "お任せ") {
+        if (onomakase_cost < 0 || cost < onomakase_cost) {
+          onomakase_cost = cost;
+        }
+      }
+    }
+    Report(onomakase_cost >= 0 && omakase_cost >= 0 &&
+               onomakase_cost < omakase_cost,
+           "お任せ が おまかせ より優先される",
+           "お任せ=" + std::to_string(onomakase_cost) + " おまかせ=" +
+               std::to_string(omakase_cost));
+
+    // (c) コスト上書きが Mozc の意図的なひらがな優先層を壊していないこと。
+    //     わたし / いう / いま / はなし は Mozc があえてひらがなを最安に
+    //     している語で、周波数データで漢字へ動かしてはいけない。
+    //
+    //     注意: ここで見ているのは辞書の見出しコストであり、実変換の 1 位
+    //     とは一致しないことがある。変換結果は語コストだけでなく連接コスト
+    //     と文脈で決まるため、たとえば わたし は辞書コスト 0 で最安だが、
+    //     文脈によっては 私 が 1 位になる。実変換の検証は quality_regression
+    //     と実機の変換結果が担う (このテストは辞書データの不変条件を守る)。
+    //
+    //     また あります / できます / ください / なります は辞書の見出しでは
+    //     なく活用で生成されるので、ここではなく quality_regression と
+    //     実機の変換結果で検証する。
+    for (const std::string& reading : {"わたし", "いう", "いま", "はなし"}) {
+      std::string cheapest_value;
+      int cheapest_cost = -1;
+      for (const std::vector<std::string>& row : rows) {
+        if (row.size() < 5 || row[0] != reading) continue;
+        const int cost = std::atoi(row[3].c_str());
+        if (cheapest_cost < 0 || cost < cheapest_cost) {
+          cheapest_cost = cost;
+          cheapest_value = row[4];
+        }
+      }
+      Report(!cheapest_value.empty() && cheapest_value == reading,
+             "ひらがな優先層を保護: " + reading + " の最安表記はひらがな",
+             "cheapest=" + cheapest_value + " cost=" +
+                 std::to_string(cheapest_cost));
+    }
+  }
+
+  // -----------------------------------------------------------------------
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"
             << (g_failures == 0 ? " (すべて通った)\n" : "\n");
   return g_failures == 0 ? 0 : 1;

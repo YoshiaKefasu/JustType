@@ -296,6 +296,11 @@ mozc_cc_test(
         # empty, which reads as "nothing is registered" rather than as the
         # missing data it is.
         "//session:keymap.cc",
+        # [6] reads dictionary*.txt to pin the frequency-data repairs (ghost
+        # kanji isolation, the お任せ override, and the hiragana-first tier).
+        # The filegroup ships only the files carrying those readings; the test
+        # enumerates whatever it finds there rather than hardcoding a list.
+        "//data/dictionary_oss:cost_repair_test_data",
     ],
     deps = [
         ":meltype_piece_pipeline",
