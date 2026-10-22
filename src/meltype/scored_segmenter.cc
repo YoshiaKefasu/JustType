@@ -60,6 +60,17 @@ bool IsUpperAscii(char c) { return c >= 'A' && c <= 'Z'; }
 
 bool IsDigit(char c) { return c >= '0' && c <= '9'; }
 
+// 全部大文字の頭字語 (WSL, CPU, GPU, API 等)。英単語辞書に無くても 1 語として
+// 扱うための判定。2〜8 文字に限るのは、長い大文字の並び (英文の見出しなど) を
+// 頭字語と誤認しないため。
+bool IsAcronymSpan(std::string_view text) {
+  if (text.size() < 2 || text.size() > 8) return false;
+  for (char c : text) {
+    if (!IsUpperAscii(c)) return false;
+  }
+  return true;
+}
+
 // 英文の中では半角のままにする記号。[ ] は日本語の入力では「」なので含めない。
 // (Meltype の IsAsciiSymbol と同じ。空白は記号に数えない)
 bool IsAsciiSymbol(char c) {
@@ -248,6 +259,10 @@ class Context {
   // 重い解析の前に落とす、英語の根拠がまるで無い区間 (CanBeEnglishSpan の移植)。
   bool CanBeEnglishSpan(int start, int end, bool growing, std::optional<char> next) const;
 
+  // 位置 at から始まる英字の並びが、4 文字以上の登録英単語で始まるか。
+  // CamelCase の語の切れ目 (ChatGPT|Plus の Plus) を辞書で裏付けるために使う。
+  bool StartsKnownCamelWord(int at) const;
+
   // 知っている英単語か (同梱の辞書・固有名詞・4 文字以上なら綴りの一覧)。
   bool IsKnownEnglishWord(const std::string& lower) const;
 
@@ -268,6 +283,11 @@ class Context {
 
   // 区切り方を、最後の英語の区間までの区間の並びにする。
   std::vector<Segment> BuildSegments(const Path& path) const;
+
+  // 英語の区間を CamelCase の語の切れ目 (ChatGPT|Plus, API|Gateway) で
+  // 分ける。両側とも知っている英単語のときだけ分けるので、打った空白を含む
+  // 英文 (hello world) や、たまたま大文字が並ぶ綴りはそのまま残る。
+  std::vector<Segment> SplitCamelCasePieces(std::vector<Segment> segments) const;
 
   // 位置ごとに 1 音ぶんの情報を作っておく (Meltype の CompositionDetector.Prepare と同じ)。
   // 区間ごとに読み直すと O(n^3) になるので、ここで 1 回だけ計算する。
@@ -418,6 +438,20 @@ bool Context::EndsWithParticleAfterUnknownWord(const std::string& lower) const {
   return false;
 }
 
+// 位置 at から始まる英字の並びが、4 文字以上の登録英単語で始まるか。
+// 短い語 (pu, ka) は頭字語の途中 (GPU の PU) と同じ綴りになるので、
+// CamelCase の切れ目の根拠にはしない。
+bool Context::StartsKnownCamelWord(int at) const {
+  for (int k = at + 4; k <= n_ && k <= at + 16; ++k) {
+    if (k < n_ && !IsAsciiLetter(input_[static_cast<std::size_t>(k)])) break;
+    const std::string head = ToLowerAscii(Sub(at, k));
+    if (dictionaries_.english.ContainsWord(head) || dictionaries_.proper.ContainsWord(head)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool Context::IsConsonantHaSyllable(int p) const {
   if (p + 3 > n_) return false;
   const char first = input_[static_cast<std::size_t>(p)];
@@ -456,7 +490,11 @@ Path Context::Extend(const Path& path, int start, int end) const {
   // 知っている英単語・決まり文句と、記号・数字の入った区間 (v1.2、node.js) は長さの 2 乗。
   // 辞書に無い英字の並び (buglowers) は長さに比例するだけ (前後の日本語や知っている語を
   // 巻き込まない)。
-  const bool known = !letters || IsKnownEnglishWord(lower) || IsListedEnglishWord(lower);
+  // 全部大文字の頭字語 (WSL, GPU, API) は辞書に無くても 1 語として扱う。
+  // これが無いと GPU|kara が「G」+「PU」+「kara」に割れる (PU が辞書の語で
+  // 点が高くなるため)。
+  const bool known =
+      !letters || IsKnownEnglishWord(lower) || IsListedEnglishWord(lower) || IsAcronymSpan(raw);
   const double score =
       known ? kEnglishCharScore * std::pow(static_cast<double>(raw.size()), kLengthExponent)
             : kUnknownCharScore * static_cast<double>(raw.size());
@@ -480,6 +518,28 @@ bool Context::CanBeEnglishSpan(int start, int end, bool growing,
   }
   // 記号・空白の入る区間は英語にしない (英文の中の記号は別の区間として扱う)。
   if (has_non_letter) return false;
+
+  // 大文字の連続 (アクロニム・頭字語) の途中でスパンを開始・終了しない。
+  // これが無いと GPUkarakidoushite が「GP」+「Uからきどうして」のように
+  // 塊の途中で割れ、日本語の側に大文字が残って全体が英語に化ける。
+  // ただし CamelCase の語の切れ目 (ChatGPT|Plus, API|Gateway) は語の境界
+  // なので通す。文字だけでは GPUkara と ChatGPTPlus の区別が付かないため、
+  // 辞書を根拠にする:
+  // - 区間そのものが登録語 (chatgpt, openai) か、4 文字以上の登録語
+  // - 始まり側は、そこから始まる語が 4 文字以上の登録語 (plus, gateway)
+  // 短い登録語 (pu) は頭字語の途中 (GPU の PU) と区別できないので除く。
+  const std::string span_lower = ToLowerAscii(Sub(start, end));
+  const bool span_known_word =
+      length >= 4 && (dictionaries_.english.ContainsWord(span_lower) ||
+                      dictionaries_.proper.ContainsWord(span_lower));
+  if (start > 0 && IsUpperAscii(input_[start]) && IsUpperAscii(input_[start - 1]) &&
+      !span_known_word && !StartsKnownCamelWord(start)) {
+    return false;
+  }
+  if (end < n_ && IsUpperAscii(input_[end - 1]) && IsUpperAscii(input_[end]) &&
+      !span_known_word && !StartsKnownCamelWord(end)) {
+    return false;
+  }
   if (length < 2) return true;
   // 大文字やアポストロフィが混じる区間は、IsEnglishSpan に任せる。
   if (has_upper || has_apostrophe) return true;
@@ -509,14 +569,24 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
 
   // 小文字の語の末尾が大文字 1 文字 (holoX → ほぉX になっていた)。
   if (IsTrailingCapitalName(span, next)) return true;
-  // 小文字で始まって途中に大文字がある区間 (iPC、meteSNS) は、固有名詞の書き方
-  // (iPhone・eBay・macOS) でなければ 1 語ではない。
-  if (IsLowerAscii(span.front())) {
-    bool has_upper = false;
-    for (char c : span.substr(1)) {
-      if (IsUpperAscii(c)) has_upper = true;
-    }
-    if (has_upper && !dictionaries_.proper.ContainsWord(lower)) return false;
+  // 大文字小文字の混在チェック:
+  // - 小文字で始まって途中に大文字がある区間 (iPC, meteSNS)
+  // - 大文字が複数続いた後に小文字が続く区間 (PUka, WSLkarakidoushite)
+  // 許容されるのは TitleCase (先頭 1 文字だけ大文字: Google, Plus) または
+  // 登録済みの固有名詞 (iPhone, ChatGPT, DLsite) だけ。
+  // CamelCase の複合語 (ChatGPTPlus) をここで 1 語として認めてはいけない:
+  // 認めると DP が長い区間を選んでしまい、「ChatGPT Plus」に分かれなくなる。
+  bool has_upper = false;
+  bool has_lower = false;
+  for (char c : span) {
+    if (IsUpperAscii(c)) has_upper = true;
+    if (IsLowerAscii(c)) has_lower = true;
+  }
+  if (has_upper && has_lower) {
+    const bool is_title_case =
+        IsUpperAscii(span.front()) &&
+        std::all_of(span.begin() + 1, span.end(), [](char c) { return IsLowerAscii(c); });
+    if (!is_title_case && !dictionaries_.proper.ContainsWord(lower)) return false;
   }
   // 促音の境界 (この区間の末尾の子音と、すぐ次の文字が同じ) は、英語の区間を
   // 日本語の促音「っ」に潰す結合をここで止める。英単語 (tab) の後ろに日本語
@@ -591,6 +661,22 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
                       dictionaries_.english.HasPrefix(lower);
 
   // 大文字で始まる語 (Shift を押して打った) は固有名詞や英文。
+  // すべて大文字の頭字語 (WSL, CPU, GPU, API 等) は辞書に無くても英語。
+  // ただし CamelCase の語の途中 (ChatGPTPlus の GPT) は頭字語ではない。
+  // 見分け方は直前の英字の並び: そこに大文字が含まれていれば英単語の続き
+  // (Chat|GPTPlus) で、すべて小文字なら日本語のローマ字の後 (kyouha|APIwo)
+  // か文頭なので頭字語。
+  const std::size_t acronym_at = static_cast<std::size_t>(span.data() - input_.data());
+  bool inside_english_word = false;
+  for (int k = static_cast<int>(acronym_at) - 1; k >= 0 && k >= static_cast<int>(acronym_at) - 16;
+       --k) {
+    const char c = input_[static_cast<std::size_t>(k)];
+    if (!IsAsciiLetter(c)) break;
+    if (IsUpperAscii(c)) inside_english_word = true;
+  }
+  const bool is_all_upper_acronym =
+      !has_lower && span.size() >= 2 && span.size() <= 8 && !inside_english_word;
+  if (is_all_upper_acronym) return true;
   if (IsUpperAscii(span.front()) && (exact || prefix || at_end)) return true;
   // readable_english の単語でも、日本語として最後まで読める語 (rose=ろせ, tenai=てない等) は
   // 強制英語化せず、後段の文脈判定 (ambiguous) に回す。
@@ -803,6 +889,9 @@ std::vector<Segment> Context::BuildSegments(const Path& path) const {
   }
 
   // 続いた日本語の区間を 1 つに、空白をはさんだ英語 (hello world) も 1 つにまとめる。
+  // 英語を隣接のまま別ピースにすると、DP が内部で割っていた綴り (html の ht|ml など)
+  // がそのまま表に出てしまう。CamelCase の複合語は下の SplitCamelCasePieces で
+  // 「両側とも知っている英単語」のときだけ分ける。
   std::vector<Segment> merged;
   merged.reserve(segments.size());
   for (Segment& segment : segments) {
@@ -814,7 +903,63 @@ std::vector<Segment> Context::BuildSegments(const Path& path) const {
     }
     merged.push_back(std::move(segment));
   }
-  return merged;
+  return SplitCamelCasePieces(std::move(merged));
+}
+
+std::vector<Segment> Context::SplitCamelCasePieces(std::vector<Segment> segments) const {
+  std::vector<Segment> out;
+  out.reserve(segments.size());
+  for (Segment& segment : segments) {
+    if (!segment.is_english) {
+      out.push_back(std::move(segment));
+      continue;
+    }
+    // 打った空白・記号を含む英文 (hello world) は 1 つの英文のまま。
+    bool has_non_letter = false;
+    for (char c : segment.raw) {
+      if (!IsAsciiLetter(c)) has_non_letter = true;
+    }
+    if (has_non_letter) {
+      out.push_back(std::move(segment));
+      continue;
+    }
+    // 区間全体が登録済みの語 (YouTube, JavaScript, ChatGPT) なら 1 語のまま。
+    // 辞書に無い複合語 (ChatGPTPlus, GoogleCloud) だけを分ける。
+    const std::string whole = ToLowerAscii(segment.raw);
+    if (dictionaries_.english.ContainsWord(whole) ||
+        dictionaries_.proper.ContainsWord(whole)) {
+      out.push_back(std::move(segment));
+      continue;
+    }
+    // CamelCase の語の切れ目 (大文字 + 小文字) を探し、そこで分けた両側が
+    // ともに知っている英単語なら分ける。片側でも知らない語なら、それは
+    // ただの大文字の並び (McDonald の Mc|Donald) なので分けない。
+    std::size_t cut = 0;
+    for (std::size_t i = 1; i + 1 < segment.raw.size(); ++i) {
+      if (!IsUpperAscii(segment.raw[i]) || !IsLowerAscii(segment.raw[i + 1])) continue;
+      const std::string left = ToLowerAscii(segment.raw.substr(0, i));
+      const std::string right = ToLowerAscii(segment.raw.substr(i));
+      if (IsKnownEnglishWord(left) && IsKnownEnglishWord(right)) {
+        cut = i;
+        break;
+      }
+    }
+    if (cut == 0) {
+      out.push_back(std::move(segment));
+      continue;
+    }
+    Segment head;
+    head.is_english = true;
+    head.ambiguous = segment.ambiguous;
+    head.raw = segment.raw.substr(0, cut);
+    Segment tail;
+    tail.is_english = true;
+    tail.ambiguous = segment.ambiguous;
+    tail.raw = segment.raw.substr(cut);
+    out.push_back(std::move(head));
+    out.push_back(std::move(tail));
+  }
+  return out;
 }
 
 std::vector<Segment> Context::Run() {

@@ -237,13 +237,12 @@ bool ComputePieceReadingRanges(
     const Segment& piece = pieces[i];
     std::size_t end = 0;
     if (piece.is_english) {
-      if (i + 1 < pieces.size()) {
+      if (i + 1 < pieces.size() && !pieces[i + 1].is_english) {
         // Anchor the English reading on the next Japanese piece's kana: the
         // English contribution is whatever sits between the previous anchor
-        // and this one.  An English piece followed by another English piece
-        // cannot occur (the segmenter merges them); refuse rather than guess.
+        // and this one.
         const Segment& next = pieces[i + 1];
-        if (next.is_english || next.kana.empty()) {
+        if (next.kana.empty()) {
           ranges->clear();
           return false;
         }
@@ -253,6 +252,16 @@ bool ComputePieceReadingRanges(
           return false;
         }
         end = anchor;
+      } else if (i + 1 < pieces.size()) {
+        // Adjacent English pieces (ChatGPT|Plus, API|Gateway): the reading
+        // carries each piece's typed letters in order, so the boundary is
+        // the piece's own raw length.  Anything else (Mozc read the run as
+        // kana) is not a boundary this overlay can trust: refuse.
+        if (reading.compare(pos, piece.raw.size(), piece.raw) != 0) {
+          ranges->clear();
+          return false;
+        }
+        end = pos + piece.raw.size();
       } else {
         // Trailing English takes the tail of the reading.
         end = reading.size();
@@ -410,12 +419,16 @@ std::vector<PieceSegment> ProtectSegmentsWithPieces(
       // Meltype's boundary spaces live on the English piece's edge segments:
       // a space before the piece when it is not first, after it when it is
       // not last — never doubled against whitespace the raw already carries.
+      // Two adjacent English pieces (ChatGPT|Plus) must not both add a space
+      // at their shared edge: the second piece's leading space already opens
+      // the gap, so the first piece adds no trailing one there.
       const bool leading =
           pi > 0 && !StartsWithSpace(pieces[pi].raw) &&
           !EndsWithSpace(pieces[pi - 1].raw);
       const bool trailing =
           pi + 1 < pieces.size() && !EndsWithSpace(pieces[pi].raw) &&
-          !StartsWithSpace(pieces[pi + 1].raw);
+          !StartsWithSpace(pieces[pi + 1].raw) &&
+          !(pieces[pi + 1].is_english && pieces[pi].is_english);
       // The run the English piece owns — one segment or Mozc's own
       // fine-grained split of the letters — collapses into one segment under
       // the concatenated keys.  Reaching the screen half raw, half Mozc

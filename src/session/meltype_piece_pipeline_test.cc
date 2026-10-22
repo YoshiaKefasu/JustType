@@ -261,6 +261,41 @@ TEST(MeltypePieceReadingRangesTest, RefusesWhenKanaDoesNotMatchReading) {
   EXPECT_TRUE(ranges.empty());
 }
 
+TEST(MeltypePieceReadingRangesTest, AdjacentEnglishPiecesSplitOnTypedLength) {
+  // ChatGPT|Plus: two adjacent English pieces have no Japanese anchor between
+  // them, so each piece's range is its own typed letters.  This is what lets
+  // the boundary space make the screen read "ChatGPT Plus" instead of
+  // "ChatGPTPlus".
+  const std::string reading = "ChatGPTPlus";
+  std::vector<PieceReadingRange> ranges;
+  ASSERT_TRUE(ComputePieceReadingRanges({En("ChatGPT"), En("Plus")}, reading,
+                                       &ranges));
+  ASSERT_EQ(ranges.size(), 2u);
+  EXPECT_EQ(ranges[0].begin, 0u);
+  EXPECT_EQ(ranges[0].end, 7u);
+  EXPECT_EQ(ranges[1].begin, 7u);
+  EXPECT_EQ(ranges[1].end, 11u);
+  EXPECT_EQ(ReadingSub(reading, ranges[0]), "ChatGPT");
+  EXPECT_EQ(ReadingSub(reading, ranges[1]), "Plus");
+}
+
+TEST(MeltypePieceReadingRangesTest, AdjacentEnglishPiecesRefuseWhenReadingDiffers) {
+  // The reading must carry the typed letters at this position.  When Mozc read
+  // the run as kana instead, the boundary is not trustworthy: refuse rather
+  // than slice against a wrong offset.
+  std::vector<PieceReadingRange> ranges;
+  EXPECT_FALSE(ComputePieceReadingRanges(
+      {En("ChatGPT"), En("Plus")}, "ちゃんじーぴーてぃー", &ranges));
+  EXPECT_TRUE(ranges.empty());
+
+  // Same refusal when the first piece's letters are not where the reading puts
+  // them (a character differs inside the run).  A shorter tail alone is not a
+  // refusal: the trailing piece takes the rest of the reading by design.
+  EXPECT_FALSE(ComputePieceReadingRanges(
+      {En("ChatGPT"), En("Plus")}, "ChatGPXPlus", &ranges));
+  EXPECT_TRUE(ranges.empty());
+}
+
 TEST(MeltypePieceProtectionTest, EnglishPieceKeepsMozcBaselineAroundIt) {
   // kyouhagooglede -> Mozc's own multi-clause baseline, English pinpointed.
   const std::string reading = "きょうはごおぐえで";
@@ -451,6 +486,39 @@ TEST(MeltypePieceProtectionTest, EdgeSpacesFollowEnglishBoundaryRule) {
       {Mozc("きょうは", "きょうは"), Mozc("ごおぐえ", "グーグル")},
       {Ja("kyouha", "きょうは"), En("google")}, {"", ""});
   EXPECT_EQ(JoinValues(trailing), "きょうは google");
+}
+
+TEST(MeltypePieceProtectionTest, AdjacentEnglishPiecesGetOneBoundarySpace) {
+  // ChatGPT|Plus: two adjacent English pieces share an edge.  Only one space
+  // may appear there — the second piece's leading space opens the gap and the
+  // first piece adds no trailing one — so the screen reads "ChatGPT Plus",
+  // never "ChatGPT  Plus".
+  const std::string reading = "ChatGPTPlus";
+  const std::vector<PieceSegment> baseline = {
+      Mozc("ChatGPT", "ChatGPT"), Mozc("Plus", "Plus")};
+  ASSERT_EQ(JoinKeys(baseline), reading);
+
+  const std::vector<PieceSegment> protected_segments =
+      ProtectSegmentsWithPieces(baseline, {En("ChatGPT"), En("Plus")},
+                                {"", ""});
+  EXPECT_EQ(JoinKeys(protected_segments), reading);
+  EXPECT_EQ(JoinValues(protected_segments), "ChatGPT Plus");
+  // Exactly one space, not two.
+  EXPECT_EQ(JoinValues(protected_segments).find("  "), std::string::npos);
+
+  // The same rule holds when the pair sits after a Japanese piece: the
+  // Japanese/English edge keeps its space and the English/English edge keeps
+  // exactly one.
+  const std::string mixed_reading = "きょうはChatGPTPlus";
+  const std::vector<PieceSegment> mixed_baseline = {
+      Mozc("きょうは", "今日は"), Mozc("ChatGPT", "ChatGPT"),
+      Mozc("Plus", "Plus")};
+  ASSERT_EQ(JoinKeys(mixed_baseline), mixed_reading);
+  const std::vector<PieceSegment> mixed_protected = ProtectSegmentsWithPieces(
+      mixed_baseline, {Ja("kyouha", "きょうは"), En("ChatGPT"), En("Plus")},
+      {"", "", ""});
+  EXPECT_EQ(JoinKeys(mixed_protected), mixed_reading);
+  EXPECT_EQ(JoinValues(mixed_protected), "今日は ChatGPT Plus");
 }
 
 // ---------------------------------------------------------------------------

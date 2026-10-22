@@ -244,6 +244,45 @@ int main() {
   Expect("っちゃうってっぽい", "cchautteppoi", Final(),
          "JA:っちゃうってっぽい");
 
+  std::cout << "\n[8] 大文字の頭字語 (アクロニム) と日本語の境界\n";
+  // 大文字の連続 (WSL, CPU, GPU, API) は英単語辞書に無くても英語の 1 語として
+  // 切り出し、直後の日本語 (から起動して) を巻き込まない。以前は大文字の塊の
+  // 途中 (SL, PU, PI) で区切られ、全体がローマ字のまま残っていた。
+  Expect("WSL から起動して", "WSLkarakidoushite", Final(), "EN:WSL|JA:からきどうして");
+  Expect("CPU から起動して", "CPUkarakidoushite", Final(), "EN:CPU|JA:からきどうして");
+  Expect("GPU から起動して", "GPUkarakidoushite", Final(), "EN:GPU|JA:からきどうして");
+  Expect("API から起動して", "APIkarakidoushite", Final(), "EN:API|JA:からきどうして");
+  // 頭字語だけの入力と、助詞が続く形。
+  Expect("WSL だけ", "WSL", Final(), "EN:WSL");
+  Expect("API を", "APIwo", Final(), "EN:API|JA:を");
+  Expect("CPU が", "CPUga", Final(), "EN:CPU|JA:が");
+  Expect("GPU で", "GPUde", Final(), "EN:GPU|JA:で");
+  // 日本語の途中に置いても、頭字語だけが英字になる。
+  Expect("きょうは WSL から起動して", "kyouhaWSLkarakidoushite", Final(),
+         "JA:きょうは|EN:WSL|JA:からきどうして");
+  // 不規則な混在大文字 (PUka, WSLkara) は英語の 1 語にしない。
+  Expect("PUka は 1 語の英語にしない", "PUka", Final(), "EN:PU|JA:か");
+  Expect("WSLkara は WSL + から", "WSLkara", Final(), "EN:WSL|JA:から");
+  // 大文字始まりの普通の語 (TitleCase) と、登録済みの混在大文字の固有名詞は残す。
+  Expect("Google (TitleCase)", "Google", Final(), "EN:Google");
+  Expect("iPhone を", "iPhonewo", Final(), "EN:iPhone|JA:を");
+  Expect("ChatGPT に", "ChatGPTni", Final(), "EN:ChatGPT|JA:に");
+
+  std::cout << "\n[9] CamelCase 複合語の単語境界\n";
+  // 辞書に無い CamelCase の複合語は、両側とも知っている英単語のときだけ
+  // 分ける。ピースの境界スペースで「ChatGPT Plus」のように空いて出る。
+  Expect("ChatGPTPlus", "ChatGPTPlus", Final(), "EN:ChatGPT|EN:Plus");
+  Expect("ChatGPTPluswo", "ChatGPTPluswo", Final(), "EN:ChatGPT|EN:Plus|JA:を");
+  Expect("GoogleCloud", "GoogleCloud", Final(), "EN:Google|EN:Cloud");
+  // 区間全体が登録済みの語 (YouTube, JavaScript) は 1 語のまま分けない。
+  Expect("YouTube は分けない", "YouTube", Final(), "EN:YouTube");
+  Expect("JavaScript は分けない", "JavaScript", Final(), "EN:JavaScript");
+  // 片側が知らない語なら、ただの大文字の並び (McDonald) として分けない。
+  Expect("McDonald は分けない", "McDonald", Final(), "EN:McDonald");
+  // 打った空白を含む英文は 1 つの英文のまま。
+  Expect("hello world は 1 つの英文", "hello world", Final(), "EN:hello world");
+  Expect("hello, world! は 1 つの英文", "hello, world!", Final(), "EN:hello, world!");
+
   RomajiDetectorTests();
 
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"

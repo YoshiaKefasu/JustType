@@ -768,6 +768,29 @@ int main() {
     ReportEq("cchautteppoi の区間分け", "JA:っちゃうってっぽい", rendered);
   }
 
+  // [回帰検証] 大文字の頭字語 (WSL, CPU, GPU, API) + 日本語。大文字の塊の
+  // 途中 (SL, PU, PI) で区切ると全体がローマ字のまま残っていた。
+  for (const auto& [romaji, expected] : std::vector<std::pair<std::string, std::string>>{
+           {"WSLkarakidoushite", "EN:WSL|JA:からきどうして"},
+           {"CPUkarakidoushite", "EN:CPU|JA:からきどうして"},
+           {"GPUkarakidoushite", "EN:GPU|JA:からきどうして"},
+           {"APIkarakidoushite", "EN:API|JA:からきどうして"},
+           {"kyouhaWSLkarakidoushite", "JA:きょうは|EN:WSL|JA:からきどうして"},
+           {"APIwo", "EN:API|JA:を"},
+           {"CPUga", "EN:CPU|JA:が"},
+           {"GPUde", "EN:GPU|JA:で"},
+           {"WSLkara", "EN:WSL|JA:から"},
+       }) {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput(romaji, ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq(romaji + " の区間分け (頭字語 + 日本語)", expected, rendered);
+  }
+
 
   // -----------------------------------------------------------------------
   // [2] Mozc ベースライン + 英語ピース保護 & SystemOne & 確定: 一気通貫
@@ -1052,6 +1075,78 @@ int main() {
           {},
           {},
           "minutetteiuego: minute(英語) + っていう英語",
+      },
+      // ---- [回帰検証] 大文字の頭字語 + 日本語 (6170) ----
+      // WSL/CPU/GPU/API は英単語辞書に無くても英語の 1 語として保護され、
+      // 直後の「から起動して」は Mozc の変換のままになる。
+      {
+          "WSLkarakidoushite",
+          {{"WSL", "WSL"}, {"から", "から"}, {"きどう", "起動"}, {"して", "して"}},
+          {{}, {"起動して", "起動"}},
+          /*systemone=*/false,
+          {},
+          "WSL から起動して",
+          {},
+          {},
+          "WSLkarakidoushite: 頭字語 WSL が英字のまま保護される",
+      },
+      {
+          "CPUkarakidoushite",
+          {{"CPU", "CPU"}, {"から", "から"}, {"きどう", "起動"}, {"して", "して"}},
+          {{}, {"起動して", "起動"}},
+          /*systemone=*/false,
+          {},
+          "CPU から起動して",
+          {},
+          {},
+          "CPUkarakidoushite: 頭字語 CPU が英字のまま保護される",
+      },
+      {
+          "GPUkarakidoushite",
+          {{"GPU", "GPU"}, {"から", "から"}, {"きどう", "起動"}, {"して", "して"}},
+          {{}, {"起動して", "起動"}},
+          /*systemone=*/false,
+          {},
+          "GPU から起動して",
+          {},
+          {},
+          "GPUkarakidoushite: 頭字語 GPU が英字のまま保護される",
+      },
+      {
+          "APIkarakidoushite",
+          {{"API", "API"}, {"から", "から"}, {"きどう", "起動"}, {"して", "して"}},
+          {{}, {"起動して", "起動"}},
+          /*systemone=*/false,
+          {},
+          "API から起動して",
+          {},
+          {},
+          "APIkarakidoushite: 頭字語 API が英字のまま保護される",
+      },
+      // ---- [回帰検証] CamelCase 複合語の自動スペース挿入 (6170) ----
+      // 辞書に無い CamelCase の複合語は 2 つの英語ピースに分かれ、
+      // ピースの境界スペースで「ChatGPT Plus」のように空いて確定する。
+      {
+          "ChatGPTPlus",
+          {{"ChatGPT", "ChatGPT"}, {"Plus", "Plus"}},
+          {{}, {}},
+          /*systemone=*/false,
+          {},
+          "ChatGPT Plus",
+          {},
+          {},
+          "ChatGPTPlus: CamelCase の語境界で半角スペースが入る",
+      },
+      {
+          "GoogleCloud",
+          {{"Google", "Google"}, {"Cloud", "Cloud"}},
+          {{}, {}},
+          /*systemone=*/false,
+          {},
+          "Google Cloud",
+          {},
+          {},
+          "GoogleCloud: CamelCase の語境界で半角スペースが入る",
       },
   };
 
