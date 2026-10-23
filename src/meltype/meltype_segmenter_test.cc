@@ -268,6 +268,7 @@ int main() {
   Expect("iPhone を", "iPhonewo", Final(), "EN:iPhone|JA:を");
   Expect("ChatGPT に", "ChatGPTni", Final(), "EN:ChatGPT|JA:に");
 
+
   std::cout << "\n[9] CamelCase 複合語の単語境界\n";
   // 辞書に無い CamelCase の複合語は、両側とも知っている英単語のときだけ
   // 分ける。ピースの境界スペースで「ChatGPT Plus」のように空いて出る。
@@ -282,6 +283,55 @@ int main() {
   // 打った空白を含む英文は 1 つの英文のまま。
   Expect("hello world は 1 つの英文", "hello world", Final(), "EN:hello world");
   Expect("hello, world! は 1 つの英文", "hello, world!", Final(), "EN:hello, world!");
+
+  std::cout << "\n[10] 小書きかなの x 綴りと、英語の直後の だと\n";
+  // x + 母音 (xi = ぃ) は英単語の綴りにも現れる (axe, taxi) が、x はローマ字の
+  // 普通の綴りではないので、読めたなら日本語を打っている。以前は xi が英語辞書に
+  // あったため aidexianara の xi だけが英語になり、アイデ ぃ アなら に化けていた。
+  Expect("アイデアなら (xi = ぃ)", "aidexianara", Final(), "JA:あいでぃあなら");
+  Expect("アイデア (xi = ぃ)", "aidexia", Final(), "JA:あいでぃあ");
+  // x の小書きかな (xa xu xe xo xtu xya xyu xyo)。
+  Expect("ぁ", "xa", Final(), "JA:ぁ");
+  Expect("ぅ", "xu", Final(), "JA:ぅ");
+  Expect("ぇ", "xe", Final(), "JA:ぇ");
+  Expect("ぉ", "xo", Final(), "JA:ぉ");
+  Expect("っ (xtu)", "xtu", Final(), "JA:っ");
+  Expect("ゃ (xya)", "xya", Final(), "JA:ゃ");
+  // 小書きかなを l で打つ綴り (la, li …) は kStrictTable に入れない。
+  // 入れると like が「有効なローマ字」になり、英語確定の経路を通らなくなる。
+  Expect("like は英語のまま", "like", Final(), "EN:like");
+  Expect("life は英語のまま", "life", Final(), "EN:life");
+  Expect("late は英語のまま", "late", Final(), "EN:late");
+  // 英語の IME に続く「だと」(dato) は、英語同士の合体ではなく日本語。
+  Expect("IME だと", "IMEdato", Final(), "EN:IME|JA:だと");
+  Expect("Google IME だと", "Google IMEdato", Final(), "EN:Google IME|JA:だと");
+  Expect("だと だけ", "dato", Final(), "JA:だと");
+  // 人名の Xi は英語のまま (固有名詞として登録してある)。
+  Expect("Xi Jinping は英語のまま", "Xi Jinping", Final(), "EN:Xi Jinping");
+  // 小書きかなの x 綴りを含む読みになる既知の英単語は英語のまま。x を kStrictTable に
+  // 入れたことで taxi が「たぃ」、examine が「えぁみね」と読めるようになり、英語確定の
+  // 経路 (!analysis.is_valid) を通らなくなっていた (回帰防止)。
+  Expect("taxi は英語のまま", "taxi", Final(), "EN:taxi");
+  Expect("examine は英語のまま", "examine", Final(), "EN:examine");
+  Expect("mixture は英語のまま", "mixture", Final(), "EN:mixture");
+  Expect("axe は英語のまま", "axe", Final(), "EN:axe");
+  Expect("oxide は英語のまま", "oxide", Final(), "EN:oxide");
+  Expect("pixel は英語のまま", "pixel", Final(), "EN:pixel");
+  // 英単語の一部に x が入っていても、区間全体が x 綴り 1 音だけなら日本語
+  // (単体の xi は「ぃ」)。
+  Expect("単体の xi は ぃ", "xi", Final(), "JA:ぃ");
+  Expect("単体の xu は ぅ", "xu", Final(), "JA:ぅ");
+  // 末尾 x の英単語 + 助詞。strict の partial に x 系を入れると box の末尾 x が
+  // 「綴りの途中」として valid のままになり、boxni が xn (ん) + i と読めて
+  // 「ぼんい」に化けていた (P1 の回帰防止)。
+  Expect("box + に", "boxni", Final(), "EN:box|JA:に");
+  Expect("index + に", "indexni", Final(), "EN:index|JA:に");
+  Expect("unix + に", "unixni", Final(), "EN:unix|JA:に");
+  Expect("box + で", "boxde", Final(), "EN:box|JA:で");
+  // 2 文字の末尾 x 英単語 + 助詞 (xn = ん を strict に入れると あんい になる)。
+  Expect("ax + に", "axni", Final(), "EN:ax|JA:に");
+  Expect("ex + に", "exni", Final(), "EN:ex|JA:に");
+  Expect("ox + に", "oxni", Final(), "EN:ox|JA:に");
 
   RomajiDetectorTests();
 

@@ -156,6 +156,28 @@ constexpr KanaSpellings kStrictTable[] = {
     {"どぇ", "dwe"},
     {"どぅ", "dwu"},
     {"ー", "-"},
+    // 小書き文字の x 系 (ぁ ぃ ぅ ぇ ぉ ゃ ゅ ょ っ ゎ ゕ ゖ)。x + 母音の綴りは
+    // 英単語にも現れる (axe, taxi) が、x はローマ字の普通の綴りではないので、
+    // 読めたなら日本語を打っている (aidexianara -> あいでぃあなら)。
+    // ここに xn (ん) は入れない: 入れると ax + ni の xn が「ん」として読めて
+    // しまい、末尾 x の英単語 + 助詞 (axni) が「あんい」に化ける。xn は
+    // 変換ボックスの綴り (kCompositionTable) だけに置く。
+    // l 系 (la, li …) もここに入れない: li を読めると like が「有効なローマ字」に
+    // なり、IsEnglishSpan の英語確定の経路 (!analysis.is_valid) を通らなくなる
+    // (like -> ぃけ, life -> ぃふぇ になる)。英語かどうかの判定に小書きかなを
+    // 混ぜない、がこの表の決まり。
+    {"ぁ", "xa"},
+    {"ぃ", "xi"},
+    {"ぅ", "xu"},
+    {"ぇ", "xe"},
+    {"ぉ", "xo"},
+    {"ゃ", "xya"},
+    {"ゅ", "xyu"},
+    {"ょ", "xyo"},
+    {"っ", "xtu xtsu"},
+    {"ゎ", "xwa"},
+    {"ゕ", "xka"},
+    {"ゖ", "xke"},
 };
 
 // 変換ボックスでだけ使う綴り (小書き文字・外来音)。英語かどうかの判定には使わない。
@@ -278,14 +300,21 @@ const SpellingMap& KanaToSpellings() {
 
 SpellingSet BuildPartials(bool composition) {
   SpellingSet set;
-  auto add = [&set](const KanaSpellings& entry) {
+  // strict では x 系の綴りの途中 (x, xy, xt, xts, xw, xk) を partial に入れない。
+  // 入れると box / index の末尾 x が「綴りの途中」として valid のままになり、
+  // 続く助詞 (boxni) が xn (ん) + i と読めてしまう (ぼんい)。x は小書きかなの
+  // 綴りの頭でしかなく、英単語の末尾に現れる x とは別物なので、strict の
+  // 「読めた」の根拠にはしない。composition (変換ボックスの読み) では従来通り
+  // x を含める (x を打った途中で「読める」必要があるため)。
+  auto add = [&set](const KanaSpellings& entry, bool skip_x) {
     for (std::string_view spelling : SplitSpaces(entry.spellings)) {
+      if (skip_x && !spelling.empty() && spelling[0] == 'x') continue;
       for (std::size_t i = 1; i < spelling.size(); ++i) set.insert(spelling.substr(0, i));
     }
   };
-  for (const KanaSpellings& entry : kStrictTable) add(entry);
+  for (const KanaSpellings& entry : kStrictTable) add(entry, /*skip_x=*/!composition);
   if (composition) {
-    for (const KanaSpellings& entry : kCompositionTable) add(entry);
+    for (const KanaSpellings& entry : kCompositionTable) add(entry, /*skip_x=*/false);
   }
   return set;
 }

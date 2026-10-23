@@ -68031,7 +68031,6 @@ datival
 dative
 datively
 datives
-dato
 datolite
 datolitic
 datos
@@ -313620,7 +313619,6 @@ xeroxes
 xeroxing
 xerus
 xeruses
-xi
 xicak
 xicaque
 xii
@@ -313796,7 +313794,6 @@ xr
 xray
 xref
 xs
-xu
 xurel
 xvi
 xvii

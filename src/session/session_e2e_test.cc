@@ -791,6 +791,52 @@ int main() {
     ReportEq(romaji + " の区間分け (頭字語 + 日本語)", expected, rendered);
   }
 
+  // [回帰検証] 小書きかなの x 綴り (xi = ぃ) と、英語の直後の だと (dato)。
+  // xi が英語辞書にあったため aidexianara の xi だけが英語になり「アイデ xi アなら」
+  // に化けていた。dato が英語辞書にあったため IME + dato が 1 語の英語になっていた。
+  for (const auto& [romaji, expected] : std::vector<std::pair<std::string, std::string>>{
+           {"aidexianara", "JA:あいでぃあなら"},
+           {"aidexia", "JA:あいでぃあ"},
+           {"IMEdato", "EN:IME|JA:だと"},
+           {"Google IMEdato", "EN:Google IME|JA:だと"},
+           {"Xi Jinping", "EN:Xi Jinping"},
+           // 小書きかなを l で打つ綴りは kStrictTable に入れない (入れると like が
+           // 「有効なローマ字」になり、英語確定の経路を通らなくなる)。
+           {"like", "EN:like"},
+           {"life", "EN:life"},
+           {"late", "EN:late"},
+           // 小書きかなの x 綴りを含む読みになる既知の英単語は英語のまま。x を
+           // kStrictTable に入れた副作用 (taxi -> たぃ) をここで止める。
+           {"taxi", "EN:taxi"},
+           {"examine", "EN:examine"},
+           {"mixture", "EN:mixture"},
+           {"axe", "EN:axe"},
+           {"oxide", "EN:oxide"},
+           // 単体の x 綴りは小書きかなを打っているので日本語。
+           {"xi", "JA:ぃ"},
+           {"xu", "JA:ぅ"},
+           // 末尾 x の英単語 + 助詞。strict の partial に x 系を入れると box の
+           // 末尾 x が「綴りの途中」として valid のままになり、boxni が xn (ん) + i
+           // と読めて「ぼんい」に化けていた。
+           {"boxni", "EN:box|JA:に"},
+           {"indexni", "EN:index|JA:に"},
+           {"unixni", "EN:unix|JA:に"},
+           {"boxde", "EN:box|JA:で"},
+           // 2 文字の末尾 x 英単語 + 助詞 (xn = ん を strict に入れると あんい)。
+           {"axni", "EN:ax|JA:に"},
+           {"exni", "EN:ex|JA:に"},
+           {"oxni", "EN:ox|JA:に"},
+       }) {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput(romaji, ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq(romaji + " の区間分け (小書きかな・dato)", expected, rendered);
+  }
+
 
   // -----------------------------------------------------------------------
   // [2] Mozc ベースライン + 英語ピース保護 & SystemOne & 確定: 一気通貫

@@ -35,6 +35,15 @@ constexpr double kAdjacentPenalty = 4.0;
 /// 日本語の区間に、読めない英字が 1 文字残るたびの減点。
 constexpr double kUnreadablePenalty = 1.0;
 
+// 解析が x 綴り (xa, xi, xtu …) を使ってかなにしたか。
+// 英単語の読みが x 綴りに頼っているか (taxi = たぃ) を見るために使う。
+bool UsesXSpelling(const RomajiDetector::Analysis& analysis) {
+  for (const RomajiDetector::Token& token : analysis.tokens) {
+    if (token.romaji.find('x') != std::string_view::npos) return true;
+  }
+  return false;
+}
+
 // 助詞 (Meltype の Detection/DictionaryDetector.cs の Particles)。
 constexpr std::string_view kParticles[] = {"no", "ga", "wo", "ni", "de", "to",
                                            "ha", "mo", "wa", "he", "ya"};
@@ -106,11 +115,13 @@ bool EndsWith(std::string_view text, std::string_view suffix) {
 
 // 英単語の直後に続けて、たまたま実在の英単語と同じ綴りになる日本語の
 // 助詞・助動詞・形式名詞 (made=まで, demo=でも, tame=ため, wake=わけ,
-// toki=とき, node=ので, mono=もの, koto=こと, koso=こそ)。英語の区間の
+// toki=とき, node=ので, mono=もの, koto=こと, koso=こそ, dato=だと)。英語の区間の
 // すぐ後ろなら英語同士の合体ではなく日本語に切り分ける。
+// dato は外来語として英語辞書にあったが (IMEdato が 1 語の英語になっていた)、
+// 英語の IME に続く「だと」の方がよく打つので日本語の側に寄せる。
 constexpr std::string_view kJapaneseNominalTails[] = {
     "made", "demo", "tame", "wake", "toki",
-    "node", "mono", "koto", "koso",
+    "node", "mono", "koto", "koso", "dato",
 };
 
 /// 区間が英字のみで、全綴りが上の日本語の助詞・形式名詞と一致するとき true。
@@ -660,6 +671,18 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
   const bool prefix = growing && lower.size() >= 4 && !small_kana_spelling &&
                       dictionaries_.english.HasPrefix(lower);
 
+  // 小書きかなの x 綴り (xi = ぃ, xa = ぁ) を含む読みになる既知の英単語は英語。
+  // kStrictTable に x 系を入れたことで taxi が「たぃ」、examine が「えぁみね」と
+  // ローマ字として読めるようになり、下の英語確定の経路 (!analysis.is_valid) を
+  // 通らなくなっていた。英語の綴りとして知っている語は、x のせいで日本語に
+  // 巻き込ませない (taxi, examine, mixture, axe, oxide …)。
+  // ただし区間全体が x 綴り 1 音だけのとき (xi = ぃ, xu = ぅ) は、小書きかなを
+  // 打っているので日本語のまま (単体の xi が「ぃ」になるのを守る)。
+  if ((in_dictionary || known_spelling || readable_english) && analysis.tokens.size() > 1 &&
+      UsesXSpelling(analysis)) {
+    return true;
+  }
+
   // 大文字で始まる語 (Shift を押して打った) は固有名詞や英文。
   // すべて大文字の頭字語 (WSL, CPU, GPU, API 等) は辞書に無くても英語。
   // ただし CamelCase の語の途中 (ChatGPTPlus の GPT) は頭字語ではない。
@@ -713,7 +736,13 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
     if (lower.find('c') != std::string::npos && english_then_particle) return true;
     if (lower.find('c') != std::string::npos) {
       const RomajiDetector::Analysis c_row = romaji_.Analyze(RomajiDetector::ReadCRow(lower));
-      if (c_row.is_valid && (c_row.partial.empty() || c_row.partial == "n")) return false;
+      // c 行を k 行に読み替えた結果が x 綴りに頼って読めるなら、それは英語の
+      // 綴り (cortex, exec) であって日本語の途中ではない。x 綴りで日本語と
+      // 判定して英語確定を落とさない。
+      if (c_row.is_valid && (c_row.partial.empty() || c_row.partial == "n") &&
+          !UsesXSpelling(c_row)) {
+        return false;
+      }
     }
     // v 行 (va = ゔぁ): 辞書の英単語 (video) でなければ日本語 (vanpaia → ゔぁんぱいあ)。
     if (lower.find('v') != std::string::npos && lower.find('l') == std::string::npos &&
@@ -832,8 +861,11 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
     if (!exact && !prefix) return false;
     // 日本語のすぐ後ろの短い英単語 (thin) が、変換ボックスの綴り (thi = てぃ) では最後まで
     // 読めて、続き (gu) とも読めるなら、外来語のカタカナを打っている途中。
+    // partial が "x" のときも同じ: strict の partial から x 系を外したので、
+    // 末尾 x の英単語 (dex, box) は strict では読めないが、変換ボックスでは読める。
     if (before < 0 && !at_end && lower.size() <= 4 && next && IsAsciiLetter(*next) &&
-        fragment.is_valid && (fragment.partial.empty() || fragment.partial == "n")) {
+        fragment.is_valid &&
+        (fragment.partial.empty() || fragment.partial == "n" || fragment.partial == "x")) {
       const RomajiDetector::Analysis together =
           romaji_.AnalyzeFragment(lower + ToLowerAscii(*next));
       if (together.is_valid) return false;

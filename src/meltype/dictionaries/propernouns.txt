@@ -214,3 +214,5 @@ Civitai
 bilibili
 WSL
  
+Xi
+IME
