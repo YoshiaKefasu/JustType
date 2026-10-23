@@ -1668,6 +1668,148 @@ int main() {
   }
 
   // -----------------------------------------------------------------------
+  // [7] 辞書: 3 大頻度辞書 (JPDB / BCCWJ / YouTubeFreq) から補った現代語彙
+  //
+  // tools/dictionary/extract_freq_vocab.py が JPDB の (表記, 読み) を背骨に
+  // して、BCCWJ と YouTubeFreq に出現する現代語だけを words.tsv へ足して
+  // いる。ここではその結果のうち、壊すと痛い 3 点を固定する:
+  //
+  // (a) 要件で名指しされた 3 つの変換 (かんはつ / かんはついれず /
+  //     かんぱついれず)。JPDB は かんぱつ しか持たないので、これらは
+  //     extract_freq_vocab.py の CURATED ブロックが供給している。
+  //     表記 間髪 は dictionary04.txt に既にあるが、読み かんはつ が無い
+  //     ため、補う前は かん + 初 に割れていた。
+  //
+  // (b) 当て字を足していないこと。抽出の素朴な問い合わせ (「JPDB にあって
+  //     辞書に無い (表記, 読み)」) は 14,694 行返し、そのほぼ全部が
+  //     為る(する) / 縡(こと) / 維(これ) / 鳥渡(ちょっと) のような当て字で、
+  //     入れると する が 為る を出し始めて変換が悪くなる。
+  //     extract_freq_vocab.py の V6 がこれを弾く: 同じ読みの「かな書き頻度」
+  //     より漢字表記の頻度が低いものは当て字とみなす。
+  //     実測 (JPDB):
+  //       為る kanji 35871 / kana 12   -> 不採用 (かな が 2989 倍)
+  //       縡   kanji 173338 / kana 14  -> 不採用
+  //       一緒に kanji 183 / kana 5202 -> 採用 (漢字 が 28 倍)
+  //     ここでは不採用側だけを固定する (採用側は変換結果 (a) で見ている)。
+  //
+  // (c) words.tsv に足した行が gen_aux_dictionary.py の契約を守っていること。
+  //     3 列 (key / value / pos) で、pos は PosIds.pos_alias にある名前だけ。
+  //     ここが崩れると aux_dictionary の genrule が strict モードで落ちる。
+  // -----------------------------------------------------------------------
+  std::cout << "\n[7] 辞書: 頻度辞書から補った現代語彙\n";
+  {
+    // (c) words.tsv の形式と、pos が gen_aux_dictionary.py の別名表にあること。
+    //     別名表は同スクリプトの PosIds.pos_alias を写したもの。
+    const std::filesystem::path words_tsv =
+        std::filesystem::absolute(__FILE__).parent_path().parent_path().append(
+            "data").append("dictionary_manual").append("words.tsv");
+    std::ifstream words_input(words_tsv);
+    Report(words_input.good(), "words.tsv が読める", words_tsv.string());
+
+    const std::vector<std::string> allowed_pos = {
+        "名詞",         "固有名詞",   "人名",       "姓",
+        "名",           "組織",       "地名",       "名詞サ変",
+        "名詞形動",     "副詞",       "連体詞",     "接続詞",
+        "感動詞",       "接頭語",     "助数詞",     "接尾一般",
+        "接尾人名",     "接尾地名",
+    };
+    std::map<std::string, std::string> manual_words;  // reading -> surface
+    std::string bad_line;
+    std::string bad_pos;
+    int manual_rows = 0;
+    std::string words_line;
+    while (std::getline(words_input, words_line)) {
+      if (words_line.empty() || words_line[0] == '#') continue;
+      const std::vector<std::string> fields = SplitRow(words_line);
+      if (fields.size() != 3) {
+        if (bad_line.empty()) bad_line = words_line;
+        continue;
+      }
+      ++manual_rows;
+      manual_words[fields[0]] = fields[1];
+      if (std::find(allowed_pos.begin(), allowed_pos.end(), fields[2]) ==
+          allowed_pos.end()) {
+        if (bad_pos.empty()) bad_pos = words_line;
+      }
+    }
+    Report(bad_line.empty(), "words.tsv は全行 3 列", bad_line);
+    Report(bad_pos.empty(),
+           "words.tsv の pos はすべて gen_aux_dictionary.py の別名表にある",
+           bad_pos);
+    Report(manual_rows > 1500,
+           "words.tsv に頻度辞書由来の語彙が入っている",
+           "rows=" + std::to_string(manual_rows));
+
+    // (a) 要件で名指しされた 3 つの読みが words.tsv にあること。
+    //     値まで見るのは、読みだけ足して表記を間違える事故を防ぐため。
+    for (const std::pair<std::string, std::string>& expected :
+         std::vector<std::pair<std::string, std::string>>{
+             {"かんはつ", "間髪"},
+             {"かんはついれず", "間髪入れず"},
+             {"かんぱついれず", "間髪入れず"},
+         }) {
+      const auto found = manual_words.find(expected.first);
+      Report(found != manual_words.end() && found->second == expected.second,
+             "words.tsv に " + expected.first + " -> " + expected.second,
+             found == manual_words.end() ? "読みが無い" : found->second);
+    }
+
+    // (b) 当て字を足していないこと。words.tsv に 為る / 縡 / 維 / 鳥渡 が
+    //     1 行も無ければよい。これは「V6 を外すと静かに壊れる」ことの
+    //     検出器でもある。
+    const std::vector<std::pair<std::string, std::string>> ateji = {
+        {"する", "為る"},   {"こと", "縡"},   {"これ", "維"},
+        {"ちょっと", "鳥渡"}, {"の", "乃"},     {"な", "汝"},
+    };
+    std::string added_ateji;
+    for (const auto& entry : ateji) {
+      const auto found = manual_words.find(entry.first);
+      if (found != manual_words.end() && found->second == entry.second) {
+        if (!added_ateji.empty()) added_ateji += ", ";
+        added_ateji += entry.second + "(" + entry.first + ")";
+      }
+    }
+    Report(added_ateji.empty(), "当て字を足していない", added_ateji);
+
+    // (a') 間髪 の 3 経路が実データで引けること。dictionary04.txt の
+    //      かんぱつ -> 間髪 と、words.tsv の かんはつ -> 間髪 が両方揃うと
+    //      かんはつ / かんぱつ の両方が 間髪 になる。
+    //      (変換そのものは quality_regression と実機が担う。ここはデータ側。)
+    //
+    //      [6] の rows はスコープが閉じているので、ここで自前に読む。
+    //      runfiles に入るファイルは //data/dictionary_oss:cost_repair_test_data
+    //      が決めているので、届いたものだけを見る (見つからなければ落とす)。
+    const std::filesystem::path dictionary_directory =
+        std::filesystem::absolute(__FILE__).parent_path().parent_path().append(
+            "data").append("dictionary_oss");
+    bool kanpatsu_in_dictionary = false;
+    std::string kanpatsu_detail = "dictionary04.txt が見つからない";
+    for (const auto& entry : std::filesystem::directory_iterator(
+             dictionary_directory)) {
+      const std::string name = entry.path().filename().string();
+      if (name.size() != 16 || !name.starts_with("dictionary") ||
+          !name.ends_with(".txt")) {
+        continue;
+      }
+      std::ifstream input(entry.path());
+      if (!input) continue;
+      std::string line;
+      while (std::getline(input, line)) {
+        const std::vector<std::string> row = SplitRow(line);
+        if (row.size() < 5) continue;
+        if (row[0] == "かんぱつ" && row[4] == "間髪") {
+          kanpatsu_in_dictionary = true;
+          kanpatsu_detail = name + ": lid=" + row[1] + " cost=" + row[3];
+          break;
+        }
+      }
+      if (kanpatsu_in_dictionary) break;
+    }
+    Report(kanpatsu_in_dictionary,
+           "かんぱつ -> 間髪 が base dictionary にある", kanpatsu_detail);
+  }
+
+  // -----------------------------------------------------------------------
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"
             << (g_failures == 0 ? " (すべて通った)\n" : "\n");
   return g_failures == 0 ? 0 : 1;

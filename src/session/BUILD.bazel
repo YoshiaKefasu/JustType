@@ -301,6 +301,11 @@ mozc_cc_test(
         # The filegroup ships only the files carrying those readings; the test
         # enumerates whatever it finds there rather than hardcoding a list.
         "//data/dictionary_oss:cost_repair_test_data",
+        # [7] reads words.tsv to pin the vocabulary the frequency decks added
+        # (かんはつ / かんはついれず / かんぱついれず) and to prove no ateji
+        # (為る / 縡 / 維 / 鳥渡) slipped in, and to check every row's POS is one
+        # gen_aux_dictionary.py accepts.
+        "//data/dictionary_manual:words.tsv",
     ],
     deps = [
         ":meltype_piece_pipeline",

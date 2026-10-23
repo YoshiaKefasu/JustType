@@ -32,6 +32,10 @@ package(default_visibility = ["//:__subpackages__"])
 exports_files([
     "domain.txt",
     "general_override.txt",
+    # //session:session_e2e_test reads it directly to pin the vocabulary the
+    # frequency decks added and to check every row's POS is one
+    # gen_aux_dictionary.py accepts.
+    "words.tsv",
 ])
 
 filegroup(

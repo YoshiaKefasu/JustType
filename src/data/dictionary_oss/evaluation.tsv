@@ -205,8 +205,8 @@ OK:	ししゅう	刺繍	Conversion Expected 9	歯周	2.28.4750
 OK:	そうけつ	総穴	Conversion Expected 9	倉頡	2.30.5490
 OK:	あかつきにふねをいだす	暁に船を出だす	Conversion Expected	暁に船を出だす	2.28.4770
 OK:	さいのうをみいだす	才能を見出す	Conversion Expected 2	才能を見出だす	2.30.5432
-FAILED:	いっぴょう	一瓢	Conversion Expected 2	一票	2.28.4880
-FAILED:	いっぴょう	一瓢	Conversion Expected 9	1票	2.32.5981
+OK:	いっぴょう	一票	Conversion Expected 2	一票	3.33.6173
+OK:	いっぴょう	一票	Conversion Expected 9	1票	3.33.6173
 OK:	きそう	競う	Conversion Expected 9	寄贈	2.28.4880
 OK:	なぞめいてて	謎めいてて	Conversion Expected	謎めいてて	2.29.5268
 OK:	しょくじをしたにもかかわらず	食事をしたにもかかわらず	Conversion Match	食事をした	2.31.5851
@@ -277,12 +277,12 @@ OK:	こきゅう	呼吸	Conversion Expected 9	枯朽	2.28.5000
 OK:	こうばいりょくへいか	購買力平価	Conversion Expected	購買力平価	2.28.5000
 FAILED:	ろーまじぶんをかく	ローマ字分を書く	Conversion Expected	ローマ字文を書く	2.32.5981
 FAILED:	かんじかなまじりぶん	感じかな混じり分	Conversion Match	文	3.33.6171
-FAILED:	にせんえんさつ	にせん円札	Conversion Expected 2	二千円札	3.33.6171
-FAILED:	ごせんえんさつ	互選円札	Conversion Expected 2	五千円札	3.33.6171
-FAILED:	ごひゃくえんさつ	御百円札	Conversion Expected 2	五百円札	3.33.6171
-FAILED:	にせんえんさつ	にせん円札	Conversion Expected 9	2千円札	3.33.6171
-FAILED:	ごせんえんさつ	互選円札	Conversion Expected 9	5千円札	3.33.6171
-FAILED:	ごひゃくえんさつ	御百円札	Conversion Expected 9	5百円札	3.33.6171
+OK:	にせんえんさつ	二千円札	Conversion Expected 2	二千円札	3.33.6173
+FAILED:	ごせんえんさつ	ご千円札	Conversion Expected 2	五千円札	3.33.6173
+OK:	ごひゃくえんさつ	五百円札	Conversion Expected 2	五百円札	3.33.6173
+OK:	にせんえんさつ	二千円札	Conversion Expected 9	2千円札	3.33.6173
+FAILED:	ごせんえんさつ	ご千円札	Conversion Expected 9	5千円札	3.33.6173
+FAILED:	ごひゃくえんさつ	五百円札	Conversion Expected 9	5百円札	3.33.6173
 FAILED:	たいをなす	タイをなす	Conversion Match	体を	2.32.5981
 OK:	じゅうまん	充満	Conversion Expected 9	十万	2.32.5981
 FAILED:	じゅうまん	充満	Conversion Expected 9	10万	2.32.5981
@@ -476,9 +476,9 @@ OK:	まいとしこうれい	毎年恒例	Conversion Expected	毎年恒例	2.30.
 FAILED:	まんがよんだり	マンが読んだり	Conversion Expected	漫画読んだり	2.30.5618
 FAILED:	じんこうにかいしゃする	人口にかいしゃする	Conversion Expected	人口に膾炙する	3.33.6171
 FAILED:	いいごえんがあれば	いい御縁があれば	Conversion Expected	いいご縁があれば	2.30.5618
-FAILED:	にせんえんさつ	にせん円札	Conversion Expected	二千円札	3.33.6171
-FAILED:	ごせんえんさつ	互選円札	Conversion Expected	五千円札	3.33.6171
-FAILED:	いちまんえんさつ	糸満円札	Conversion Expected	一万円札	3.33.6171
+OK:	にせんえんさつ	二千円札	Conversion Expected	二千円札	3.33.6173
+FAILED:	ごせんえんさつ	ご千円札	Conversion Expected	五千円札	3.33.6173
+OK:	いちまんえんさつ	一万円札	Conversion Expected	一万円札	3.33.6173
 OK:	いちまん	一万	Conversion Expected	一万	2.31.5851
 OK:	ていせいぶん	訂正文	Conversion Expected 9	訂正分	2.31.5851
 OK:	ていせいぶん	訂正文	Conversion Expected 9	訂正文	2.31.5851
