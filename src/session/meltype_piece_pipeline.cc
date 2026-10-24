@@ -255,15 +255,25 @@ bool ComputePieceReadingRanges(
       } else if (i + 1 < pieces.size()) {
         // Adjacent English pieces (ChatGPT|Plus, API|Gateway): the reading
         // carries each piece's typed letters in order, so the boundary is
-        // the piece's own raw length.  Anything else (Mozc read the run as
-        // kana) is not a boundary this overlay can trust: refuse.
+        // the piece's own raw length.
+        //
+        // Design: never guess.  When the reading does not spell the piece's
+        // letters here (Mozc re-read the run as kana, "ChatGPTPlu" ->
+        // "ChatGPTPぅ"), this boundary is unknowable.  Sharing the run's range
+        // between the pieces was tried and rejected: the first piece's
+        // letters then covered the rest of the reading ("ChatGPT Pl" +
+        // "lu"), and wrong text on screen is strictly worse than keeping
+        // Mozc's own output.  So refuse the whole alignment here and let
+        // ProtectSegmentsWithPieces() keep Mozc's text untouched.
         if (reading.compare(pos, piece.raw.size(), piece.raw) != 0) {
           ranges->clear();
           return false;
         }
         end = pos + piece.raw.size();
       } else {
-        // Trailing English takes the tail of the reading.
+        // Trailing English takes the tail of the reading.  The letters are
+        // replaced by the typed ones, so whatever Mozc read there (kana for
+        // an unfinished word, the letters themselves) is irrelevant.
         end = reading.size();
       }
     } else {
@@ -295,6 +305,56 @@ bool ComputePieceReadingRanges(
   return true;
 }
 
+namespace {
+
+// Fallback alignment for a reading that is not pure kana.  Mozc's temporary
+// Shift+letter ASCII mode leaves the composition untransliterated, so the
+// reading can hold a mix of already-converted Japanese ("あの") and the raw
+// romaji for the spans Mozc never converted ("Github Cliwotsukatte").  The
+// kana anchors in ComputePieceReadingRanges cannot find the later Japanese
+// pieces there.
+//
+// Each piece then matches whichever of its own texts the reading carries at
+// that offset: an English piece its typed letters, a Japanese piece its kana
+// or its raw romaji.  Every piece must match and the matches must consume the
+// reading exactly; any gap refuses.  This can only confirm an alignment the
+// reading already spells out, so it never invents a surface.
+bool PieceRangesFromRomajiReading(
+    const std::vector<Segment>& pieces, const std::string& reading,
+    std::vector<PieceReadingRange>* ranges) {
+  if (ranges == nullptr) return false;
+  ranges->clear();
+
+  std::size_t pos = 0;
+  for (const Segment& piece : pieces) {
+    std::size_t length = 0;
+    const auto matches = [&](const std::string& candidate) {
+      return !candidate.empty() && pos + candidate.size() <= reading.size() &&
+             reading.compare(pos, candidate.size(), candidate) == 0;
+    };
+    if (piece.is_english) {
+      if (matches(piece.raw)) length = piece.raw.size();
+    } else if (matches(piece.kana)) {
+      length = piece.kana.size();
+    } else if (matches(piece.raw)) {
+      length = piece.raw.size();
+    }
+    if (length == 0) {
+      ranges->clear();
+      return false;
+    }
+    ranges->push_back(PieceReadingRange{pos, pos + length});
+    pos += length;
+  }
+  if (pos != reading.size()) {
+    ranges->clear();
+    return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 std::vector<PieceSegment> ProtectSegmentsWithPieces(
     const std::vector<PieceSegment>& mozc_segments,
     const std::vector<Segment>& pieces,
@@ -313,7 +373,17 @@ std::vector<PieceSegment> ProtectSegmentsWithPieces(
 
   std::vector<PieceReadingRange> ranges;
   if (!ComputePieceReadingRanges(pieces, reading, &ranges)) {
-    return mozc_segments;
+    // The reading may not be the kana Mozc would normally produce: while its
+    // temporary Shift+letter ASCII mode is in effect the composer leaves the
+    // letters alone, so the reading holds a mix of already-transliterated
+    // Japanese ("あの") and the raw romaji for the spans Mozc never converted
+    // ("Github Cliwotsukatte").  The kana anchors above then cannot line the
+    // pieces up.  Match piece by piece instead, and only when every piece's
+    // own text is exactly what the reading holds at that offset — anything
+    // else keeps Mozc's text, so this fallback can never invent a surface.
+    if (!PieceRangesFromRomajiReading(pieces, reading, &ranges)) {
+      return mozc_segments;
+    }
   }
 
   // Cut points at every edge of a non-empty English reading range.  Mozc

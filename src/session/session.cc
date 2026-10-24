@@ -706,6 +706,39 @@ bool IsPendingDirectCommitLearningDiscardKey(
   }
 }
 
+// The single ASCII character a Shift+letter key types, or empty when
+// |key_event| is anything else.  Mozc receives Shift+letter with the SHIFT
+// modifier already folded into the key code, so the uppercase code itself is
+// the character; CapsLock flips which case means "shifted".
+std::string ShiftedAsciiInputChar(const commands::KeyEvent& key_event) {
+  if (key_event.input_style() != commands::KeyEvent::FOLLOW_MODE ||
+      key_event.has_special_key()) {
+    return std::string();
+  }
+
+  std::string input;
+  if (!key_event.key_string().empty()) {
+    if (key_event.key_string().size() != 1) return std::string();
+    input = key_event.key_string();
+  } else if (key_event.has_key_code()) {
+    if (key_event.key_code() > 0x7f) return std::string();
+    input.push_back(static_cast<char>(key_event.key_code()));
+  } else {
+    return std::string();
+  }
+
+  const uint32_t modifiers = KeyEventUtil::GetModifiers(key_event);
+  if (KeyEventUtil::HasCtrl(modifiers) || KeyEventUtil::HasAlt(modifiers)) {
+    return std::string();
+  }
+
+  const bool caps_locked = KeyEventUtil::HasCaps(modifiers);
+  const char key = input[0];
+  const bool shifted = (!caps_locked && ('A' <= key && key <= 'Z')) ||
+                       (caps_locked && ('a' <= key && key <= 'z'));
+  return shifted ? input : std::string();
+}
+
 bool ShouldCommitLiveConversionBeforeShiftAsciiInput(
     const config::Config& config,
     const composer::Composer& composer,
@@ -739,32 +772,7 @@ bool ShouldCommitLiveConversionBeforeShiftAsciiInput(
     return false;
   }
 
-  std::string input;
-  if (!key_event.key_string().empty()) {
-    if (key_event.key_string().size() != 1) {
-      return false;
-    }
-    input = key_event.key_string();
-  } else if (key_event.has_key_code()) {
-    if (key_event.key_code() > 0x7f) {
-      return false;
-    }
-    input.push_back(static_cast<char>(key_event.key_code()));
-  } else {
-    return false;
-  }
-
-  const uint32_t modifiers = KeyEventUtil::GetModifiers(key_event);
-  if (KeyEventUtil::HasCtrl(modifiers) ||
-      KeyEventUtil::HasAlt(modifiers)) {
-    return false;
-  }
-
-  const bool caps_locked = KeyEventUtil::HasCaps(modifiers);
-  const char key = input[0];
-
-  return (!caps_locked && ('A' <= key && key <= 'Z')) ||
-         (caps_locked && ('a' <= key && key <= 'z'));
+  return !ShiftedAsciiInputChar(key_event).empty();
 }
 
 void ExtractPreeditKeyAndValue(const commands::Preedit& preedit,
@@ -2324,6 +2332,19 @@ bool Session::SendKeyConversionState(commands::Command* command) {
     return ExecuteCommandSequence(command_sequence, command);
   }
 
+  // Space in the middle of an English phrase types a space, exactly as it does
+  // in Composition state (see Session::Convert).  Live conversion keeps the
+  // context in CONVERSION state while the user is still typing, so without
+  // this the space would reach ConvertNext and end the English phrase
+  // mid-word.  CompositionEndsWithEnglishPiece() already refuses ordinary
+  // conversion (only a live composition qualifies), so a real candidate list
+  // keeps Space = ConvertNext.
+  if ((live_conversion_active_ || live_conversion_pending_) &&
+      IsPureSpaceKey(input_key) && CompositionEndsWithEnglishPiece()) {
+    command->mutable_input()->mutable_key()->set_key_code(' ');
+    return InsertCharacter(command);
+  }
+
   if (live_conversion_active_) {
     // Backward compatibility with older CUSTOM tables lacking a specialized
     // Backspace row. Built-in maps now express this behavior explicitly in
@@ -3185,10 +3206,15 @@ bool Session::MaybeStartLiveConversionInternal(
     return false;
   }
 
+  // Same exception as MaybeScheduleLiveConversion: a temporary Shift+letter
+  // ASCII mode inside a Japanese + English composition is still composition,
+  // not direct ASCII input, so the Meltype protection must keep running.
   const transliteration::TransliterationType input_mode =
       context_->composer().GetInputMode();
-  if (input_mode == transliteration::HALF_ASCII ||
-      input_mode == transliteration::FULL_ASCII) {
+  if ((input_mode == transliteration::HALF_ASCII ||
+       input_mode == transliteration::FULL_ASCII) &&
+      !(IsTemporaryShiftAsciiInputMode() &&
+        CompositionMixesJapaneseAndEnglish())) {
     return false;
   }
 
@@ -3868,10 +3894,19 @@ bool Session::MaybeScheduleLiveConversion(
     return false;
   }
 
+  // Alphanumeric composition mode means the user switched to direct ASCII
+  // input, where live conversion has nothing to convert.  The exception is
+  // Mozc's own temporary Shift+letter mode inside a Japanese + English
+  // composition: typing "G" in "anoGithub" puts the composer in HALF_ASCII
+  // for that one letter even though the user is composing Japanese, and
+  // skipping live conversion there would drop the Meltype protection (and the
+  // Japanese prefix's conversion) for the rest of the composition.
   const transliteration::TransliterationType input_mode =
       context_->composer().GetInputMode();
-  if (input_mode == transliteration::HALF_ASCII ||
-      input_mode == transliteration::FULL_ASCII) {
+  if ((input_mode == transliteration::HALF_ASCII ||
+       input_mode == transliteration::FULL_ASCII) &&
+      !(IsTemporaryShiftAsciiInputMode() &&
+        CompositionMixesJapaneseAndEnglish())) {
     return false;
   }
 
@@ -4604,7 +4639,25 @@ bool Session::InsertCharacter(commands::Command* command) {
 
   if ((live_conversion_active_ || live_conversion_pending_) &&
       ShouldCommitLiveConversionBeforeShiftAsciiInput(
-          context_->GetConfig(), context_->composer(), key)) {
+          context_->GetConfig(), context_->composer(), key) &&
+      // A Shift+letter typed inside Japanese + English input is the next
+      // letter of an English word, not a switch into alphanumeric mode.
+      // Committing the live conversion here sends the already-converted
+      // Japanese prefix to the application and restarts the composition at
+      // the letter, which is how "anoGithubCliwotsukatte" lost its "あの".
+      //
+      // Both judgements must look at the composition *plus* the letter, not
+      // the composition alone: the first letter of a word can still be read
+      // as Japanese romaji ("github" + "C" segments as EN:github|JA:C), and a
+      // purely Japanese composition is not mixed until that letter lands
+      // ("ano" is JA:あの, "anoG" is JA:あの|EN:G).  Asking about the
+      // composition as it is now would therefore answer "keep the commit" for
+      // the very keystroke that starts the word.  A composition that stays
+      // purely Japanese even with the letter ("kyou" + Shift+A is Japanese
+      // only when "A" is not read as English) keeps Mozc's documented
+      // commit-then-switch behaviour.
+      !CompositionEndsWithEnglishPiece(ShiftedAsciiInputChar(key)) &&
+      !CompositionMixesJapaneseAndEnglish(ShiftedAsciiInputChar(key))) {
     ClearPendingRerankedPreeditCommitAfterConvertCancel();
     if (live_conversion_active_) {
       const std::string live_key =
@@ -6737,6 +6790,27 @@ bool Session::Convert(commands::Command* command) {
       context_->GetConfig().show_candidate_window_on_initial_conversion() &&
       !context_->GetConfig().use_live_conversion();
 
+  // Space in the middle of an English phrase types a space instead of
+  // starting conversion.  Mozc's classical keymap binds Composition Space to
+  // Convert, which fires on the space in "anoGithub Cliwotsukatte" and
+  // converts the English run away mid-phrase.  Meltype already knows the
+  // composition ends in an English piece there, so the space is what the user
+  // meant: the separator between English words.  A Japanese composition
+  // (kyouha) keeps Convert, and so does a Space typed right after a space
+  // (the trailing whitespace is its own piece, so the second Space converts
+  // what was typed) — pressing Space twice is the escape hatch.
+  //
+  // The space is half-width on purpose, matching the ASCII-composition branch
+  // below: this is an English phrase, and a full-width space would be wrong
+  // in it.  Only a plain Space qualifies; Shift+Space (InsertAlternateSpace)
+  // is an explicit request for the alternate width and stays untouched.
+  if (context_->state() == ImeContext::COMPOSITION &&
+      IsPureSpaceKey(command->input().key()) &&
+      CompositionEndsWithEnglishPiece()) {
+    command->mutable_input()->mutable_key()->set_key_code(' ');
+    return InsertCharacter(command);
+  }
+
   // TODO(komatsu): Make a function like ConvertOrSpace.
   // Handle a space key on the ASCII composition mode.
   if (context_->state() == ImeContext::COMPOSITION &&
@@ -7611,6 +7685,64 @@ bool Session::CanStartAutoConversion(
     return false;
   }
   return true;
+}
+
+bool Session::CompositionEndsWithEnglishPiece(absl::string_view extra) const {
+  // Only a live composition can end in an English piece: with nothing typed
+  // there is no piece, and during conversion Space means "next candidate".
+  if (context_->state() != ImeContext::COMPOSITION &&
+      !live_conversion_active_ && !live_conversion_pending_) {
+    return false;
+  }
+
+  std::string raw = context_->composer().GetRawString();
+  if (raw.empty()) return false;
+  raw.append(extra);
+
+  // Ask Meltype about the text as typed so far.
+  const std::vector<mozkey::meltype::ScoredSegmenter::Segment> pieces =
+      MeltypeBridge::SegmentRomaji(raw, /*final=*/false);
+  if (pieces.empty()) return false;  // no dictionaries: Mozc's Convert stays
+
+  // Only the very last piece decides.  A trailing space is its own Japanese
+  // piece, so "anoGithub " (the space just accepted) makes the *next* Space
+  // convert — pressing Space twice is the escape hatch when the user really
+  // wants a candidate list.
+  return pieces.back().is_english;
+}
+
+bool Session::IsTemporaryShiftAsciiInputMode() const {
+  const transliteration::TransliterationType input_mode =
+      context_->composer().GetInputMode();
+  if (input_mode != transliteration::HALF_ASCII &&
+      input_mode != transliteration::FULL_ASCII) {
+    return false;
+  }
+
+  // Mozc's temporary Shift+letter mode leaves the comeback mode at the user's
+  // real mode (HIRAGANA); choosing alphanumeric mode on purpose (Eisu) makes
+  // the alphanumeric mode the comeback mode too.
+  const transliteration::TransliterationType comeback_mode =
+      context_->composer().GetComebackInputMode();
+  return comeback_mode != transliteration::HALF_ASCII &&
+         comeback_mode != transliteration::FULL_ASCII;
+}
+
+bool Session::CompositionMixesJapaneseAndEnglish(absl::string_view extra) const {
+  std::string raw = context_->composer().GetRawString();
+  if (raw.empty()) return false;
+  raw.append(extra);
+
+  const std::vector<mozkey::meltype::ScoredSegmenter::Segment> pieces =
+      MeltypeBridge::SegmentRomaji(raw, /*final=*/false);
+  if (pieces.empty()) return false;
+
+  bool has_japanese = false;
+  bool has_english = false;
+  for (const auto& piece : pieces) {
+    (piece.is_english ? has_english : has_japanese) = true;
+  }
+  return has_japanese && has_english;
 }
 
 bool Session::CanDirectCommitPendingLiveConversionBeforeInsert(

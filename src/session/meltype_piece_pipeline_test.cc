@@ -378,6 +378,41 @@ TEST(MeltypePieceProtectionTest, EmptyKeySegmentRefusesAlignment) {
   EXPECT_EQ(protected_segments, baseline);
 }
 
+// Mozc's temporary Shift+letter ASCII mode leaves the composition
+// untransliterated, so the reading holds a mix of converted Japanese and the
+// raw romaji Mozc never converted ("anoGithub Cliwotsukatte" -> "あの" +
+// "Github Cliwotsukatte").  The kana anchors cannot line that up, so the
+// overlay falls back to matching each piece's own text; the English runs are
+// still protected instead of leaking Mozc's reading of the letters.
+//
+// The Japanese tail keeps whatever Mozc had for it: in this baseline Mozc
+// never converted it either, so the tail stays the raw romaji.
+TEST(MeltypePieceProtectionTest, RomajiReadingStillProtectsEnglishRun) {
+  const std::vector<PieceSegment> baseline = {
+      Mozc("あのGithub Cliwotsukatte", "あのGithub Cliwotsukatte")};
+  const std::vector<PieceSegment> protected_segments =
+      ProtectSegmentsWithPieces(
+          baseline,
+          {Ja("ano", "あの"), En("Github"), Ja(" ", " "), En("Cli"),
+           Ja("wotsukatte", "をつかって")},
+          {"", "", "", "", ""});
+  EXPECT_EQ(JoinValues(protected_segments),
+            "あの Github Cli wotsukatte");
+}
+
+// The fallback must not guess: when the reading does not spell a piece out
+// exactly, the whole overlay keeps Mozc's own text.
+TEST(MeltypePieceProtectionTest, RomajiFallbackRefusesWhenReadingDisagrees) {
+  const std::vector<PieceSegment> baseline = {Mozc("あのぎてゅb", "あの技テュb")};
+  const std::vector<PieceSegment> protected_segments =
+      ProtectSegmentsWithPieces(
+          baseline,
+          {Ja("ano", "あの"), En("Github"),
+           Ja("wotsukatte", "をつかって")},
+          {"", "", ""});
+  EXPECT_EQ(protected_segments, baseline);
+}
+
 TEST(MeltypePieceProtectionTest, EnglishPieceAcrossTwoSegmentsCollapses) {
   // Mozc split the letters themselves (ごお + ぐえ): the owned run collapses
   // into one segment with the typed letters, because half raw / half Mozc

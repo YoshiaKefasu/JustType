@@ -861,6 +861,35 @@ class Session {
   bool CanDirectCommitAfterPunctuation(
       const mozc::commands::KeyEvent& key_event) const;
 
+  // True when the composition currently ends in an English piece, i.e. the
+  // user is in the middle of typing English words ("anoGithub Cli").  Space
+  // then types a space instead of starting conversion, so an English phrase
+  // keeps composing.  Meltype is the only judge: without its dictionaries
+  // there is no opinion and Space keeps Mozc's classical Convert binding.
+  //
+  // |extra| is the text the key about to be sent would append (the Shift+letter
+  // being decided about), so a caller can ask "does the composition still end
+  // in an English piece *after* this key?" before committing it away.
+  bool CompositionEndsWithEnglishPiece(absl::string_view extra = "") const;
+
+  // True when the composition mixes Japanese and English ("anoGithub Cli"),
+  // i.e. Meltype found at least one Japanese and one English piece.  That is
+  // the shape a temporary Shift+letter ASCII mode can appear in; a pure
+  // English composition ("hello") is direct ASCII typing.
+  //
+  // |extra| is the text the key about to be sent would append.  It matters
+  // for the first letter of an English word: "ano" alone is purely Japanese,
+  // but "anoG" is Japanese + English, so asking about the composition as it
+  // is now would answer "not mixed" for the very keystroke that starts the
+  // word.
+  bool CompositionMixesJapaneseAndEnglish(absl::string_view extra = "") const;
+
+  // True when the composer is in alphanumeric mode only because Mozc switched
+  // to it for a Shift+letter ("G" in "anoGithub"), as opposed to the user
+  // choosing alphanumeric mode on purpose (Eisu).  Only the former still has a
+  // composition to convert, so live conversion must keep running for it.
+  bool IsTemporaryShiftAsciiInputMode() const;
+
   // Handles KeyEvent::activated to support indirect IME on/off.
   bool HandleIndirectImeOnOff(mozc::commands::Command* command);
 

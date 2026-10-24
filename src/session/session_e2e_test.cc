@@ -1194,6 +1194,40 @@ int main() {
           {},
           "GoogleCloud: CamelCase の語境界で半角スペースが入る",
       },
+      // ---- [回帰検証] 英語入力中の半角スペース (Space は空白であって変換ではない) ----
+      // Mozc の古典キーマップは Composition Space を Convert に割り当てている。
+      // 英語を打っている最中に Space を押すと変換が誤発火し、後続の
+      // Cliwotsukatte が半角英数のまま流し込まれていた (Github の後ろの
+      // スペースで変換モードに入り、以降が全部ローマ字で残る)。
+      // Meltype は空白を独立したピースとして切り出し、英語ピースの後ろの
+      // 境界スペースとして扱うので、画面も確定も「あの Github Cli を使って」
+      // になる。
+      {
+          "anoGithub Cliwotsukatte",
+          {{"あの", "あの"}, {"Github", "Github"}, {" ", " "},
+           {"Cli", "Cli"}, {"をつかって", "を使って"}},
+          {{"あの"}, {}, {}, {}, {"を使って"}},
+          /*systemone=*/false,
+          {},
+          "あの Github Cli を使って",
+          {},
+          {},
+          "anoGithub Cliwotsukatte: スペースありでも英語ピースが保護される",
+      },
+      // 同じ入力のスペースなし版。CamelCase の自動分離だけで同じ確定文字列に
+      // なることを、スペースあり版と並べて固定する。
+      {
+          "anoGithubCliwotsukatte",
+          {{"あの", "あの"}, {"Github", "Github"}, {"Cli", "Cli"},
+           {"をつかって", "を使って"}},
+          {{"あの"}, {}, {}, {"を使って"}},
+          /*systemone=*/false,
+          {},
+          "あの Github Cli を使って",
+          {},
+          {},
+          "anoGithubCliwotsukatte: CamelCase 自動分離で同じ確定文字列",
+      },
   };
 
   for (const PipelineCase& test_case : cases) {
