@@ -134,6 +134,31 @@ TEST_F(SystemUtilTest, ResolveUserProfileDirectoryName) {
   EXPECT_EQ(SystemUtil::ResolveUserProfileDirectoryName(kLocalLow),
             kUserProfileDirectoryName);
 }
+
+// A 32-bit process must still resolve the native 64-bit Program Files
+// directory. SHGetFolderPathW(CSIDL_PROGRAM_FILES) is subject to WOW64
+// redirection and returns "C:\Program Files (x86)" from a 32-bit process, so
+// the value is taken from %ProgramW6432% instead. This is not theoretical:
+// JustType_tip32.dll runs inside 32-bit host applications.
+TEST_F(SystemUtilTest, GetProgramFiles64DirectoryUsesProgramW6432) {
+  EnvironMock environ_mock;
+
+  // The environment variable always wins, and is returned verbatim.
+  environ_mock.SetEnv("ProgramW6432", "C:\\Program Files");
+  EXPECT_EQ(SystemUtil::GetProgramFiles64Directory(), "C:\\Program Files");
+  // The resolved path must never be the WOW64-redirected (x86) directory.
+  EXPECT_EQ(SystemUtil::GetProgramFiles64Directory().find("(x86)"),
+            std::string::npos);
+
+  // A non-default location (e.g. a relocated Program Files) is honored too.
+  environ_mock.SetEnv("ProgramW6432", "D:\\Apps");
+  EXPECT_EQ(SystemUtil::GetProgramFiles64Directory(), "D:\\Apps");
+
+  // Only when the variable is absent (genuine 32-bit Windows) does it fall
+  // back to the shell API, which must still yield a non-empty directory.
+  environ_mock.SetEnv("ProgramW6432", "");
+  EXPECT_FALSE(SystemUtil::GetProgramFiles64Directory().empty());
+}
 #endif  // _WIN32
 
 #ifdef __ANDROID__

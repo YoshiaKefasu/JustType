@@ -883,7 +883,28 @@ bool Composer::InsertCharacterKeyEvent(const commands::KeyEvent& key) {
   if (key.has_mode()) {
     const transliteration::TransliterationType new_input_mode =
         GetTransliterationTypeFromCompositionMode(key.mode());
-    if (new_input_mode != input_mode_) {
+
+    // A key event can carry the mode the client believes is active. While Mozc
+    // is in its own temporary Shift+letter ASCII mode, that mode belongs to the
+    // word being typed, not to a selection the user made, so a key event must
+    // not be allowed to end it. Honouring the echoed mode here was the second
+    // half of the _A lock: the client echoed the transient mode back, and
+    // SetInputMode() then overwrote comeback_input_mode_ (the only way back to
+    // Japanese) with it.
+    //
+    // The temporary mode is recognisable because comeback_input_mode_ still
+    // holds the user's real mode while input_mode_ is ASCII. An explicitly
+    // chosen alphanumeric mode (Eisu) sets both to ASCII, so it is not
+    // mistaken for this case and keeps behaving as a real mode.
+    const bool in_temporary_ascii_mode =
+        (input_mode_ == transliteration::HALF_ASCII ||
+         input_mode_ == transliteration::FULL_ASCII) &&
+        comeback_input_mode_ != transliteration::HALF_ASCII &&
+        comeback_input_mode_ != transliteration::FULL_ASCII;
+    if (in_temporary_ascii_mode) {
+      // Leave the temporary run alone. ApplyTemporaryInputMode() below and the
+      // Session's Meltype-driven revert decide when it ends.
+    } else if (new_input_mode != input_mode_) {
       // Only when the new input mode is different from the current
       // input mode, SetInputMode is called.  Otherwise the value of
       // comeback_input_mode_ is lost.

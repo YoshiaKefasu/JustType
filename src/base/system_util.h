@@ -114,7 +114,7 @@ class SystemUtil {
   // this situation.  This function simply returns false instead of making
   // the process crash if any of following functions cannot work as expected.
   // - SystemDirectoryCache
-  // - ProgramFilesX86Cache
+  // - ProgramFilesX86Cache / ProgramFiles64Cache
   // - LocalAppDataDirectoryCache
   // TODO(taku,yukawa): Implement more robust and reliable mechanism against
   //   sandboxed environment, where such kind of fundamental APIs are far more
@@ -132,6 +132,16 @@ class SystemUtil {
   // Exposed for unit testing.
   static std::string ResolveUserProfileDirectoryName(
       absl::string_view local_low_dir);
+
+  // Returns the native 64-bit Program Files directory (e.g. "C:\Program
+  // Files") as seen from the current process.
+  //
+  // Unlike ProgramFilesCache, which calls SHGetFolderPathW and therefore obeys
+  // WOW64 redirection, this resolves the real 64-bit directory even from a
+  // 32-bit process by consulting %ProgramW6432% first. On genuine 32-bit
+  // Windows, where that variable does not exist, it falls back to the shell
+  // API. Exposed for unit testing.
+  static std::string GetProgramFiles64Directory();
 #endif  // _WIN32
 
   // return string representing os version

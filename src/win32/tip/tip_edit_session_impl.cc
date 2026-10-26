@@ -1034,8 +1034,15 @@ HRESULT UpdatePrivateContext(TipTextService* text_service, ITfContext* context,
 
   if ((action_set & TipInputModeManager::kNotifySystemConversionMode) ==
       TipInputModeManager::kNotifySystemConversionMode) {
+    // Publish the user's chosen mode (the TSF / logical mode), not the mode the
+    // composition happens to be in right now. Mozc temporarily enters
+    // HALF_ASCII for a Shift+letter, and that is a detail of how the current
+    // word is being typed, not a mode change the user asked for. Writing it to
+    // the TSF compartment made the next key event echo the transient mode back
+    // to the server, which mistook it for a manual alphanumeric selection and
+    // overwrote the comeback mode: the IME then stayed in _A for good.
     const CompositionMode mozc_mode = static_cast<CompositionMode>(
-        input_mode_manager->GetEffectiveConversionMode());
+        input_mode_manager->GetTsfConversionMode());
     uint32_t native_mode = 0;
     if (ConversionModeUtil::ToNativeMode(
             mozc_mode, private_context->input_behavior().prefer_kana_input,

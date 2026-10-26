@@ -63,7 +63,7 @@ mozc_cc_binary(
 mozc_win32_cc_prod_binary(
     name = "mozc_server_win",
     executable_name_map = {
-        "Mozc": "mozc_server.exe",
+        "Mozc": "JustType_server.exe",
         "GoogleJapaneseInput": "GoogleIMEJaConverter.exe",
     },
     static_crt = False,

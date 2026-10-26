@@ -56,7 +56,8 @@ UINT __stdcall UnregisterTIPRollback(MSIHANDLE msi_handle);
 // Opens the uninstall survey page with the default browser.
 UINT __stdcall OpenUninstallSurveyPage(MSIHANDLE msi_handle);
 
-// Shuts down mozc_server.exe and mozc_renderer.exe to remove their files.
+// Shuts down JustType_server.exe and JustType_renderer.exe to remove their
+// files.
 UINT __stdcall ShutdownServer(MSIHANDLE msi_handle);
 
 // Restores the IME environment for the current user.  See the comment in
@@ -94,12 +95,13 @@ UINT __stdcall RestoreServiceState(MSIHANDLE msi_handle);
 // you replace the GoogleIMEJaCacheService.exe.
 UINT __stdcall StopCacheService(MSIHANDLE msi_handle);
 
-// Adds outbound Windows Firewall block rules for Mozc runtime executables.
+// Adds outbound Windows Firewall block rules for JustType runtime executables.
 // This is a best-effort offline hardening action.
-UINT __stdcall InstallMozcFirewallRules(MSIHANDLE msi_handle);
+UINT __stdcall InstallJustTypeFirewallRules(MSIHANDLE msi_handle);
 
-// Removes outbound Windows Firewall block rules for Mozc runtime executables.
-UINT __stdcall RemoveMozcFirewallRules(MSIHANDLE msi_handle);
+// Removes outbound Windows Firewall block rules for JustType runtime
+// executables.
+UINT __stdcall RemoveJustTypeFirewallRules(MSIHANDLE msi_handle);
 
 // Writes omaha's ap value for changing the user's channel.
 UINT __stdcall WriteApValue(MSIHANDLE msi_handle);

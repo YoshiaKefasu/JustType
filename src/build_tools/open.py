@@ -31,7 +31,7 @@
 """A cross-platform script to open file with resolving symlink.
 
 Usage:
-  % python3 build_tools/open.py bazel-bin/win32/installer/Mozc64.msi
+  % python3 build_tools/open.py bazel-bin/win32/installer/JustType64.msi
 """
 
 import argparse

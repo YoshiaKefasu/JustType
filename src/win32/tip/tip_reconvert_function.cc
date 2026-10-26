@@ -57,7 +57,7 @@ constexpr std::wstring_view kReconvertFunctionDisplayName =
     L"Google Japanese Input: Reconversion Function";
 #else   // GOOGLE_JAPANESE_INPUT_BUILD
 constexpr std::wstring_view kReconvertFunctionDisplayName =
-    L"Mozc: Reconversion Function";
+    L"JustType: Reconversion Function";
 #endif  // GOOGLE_JAPANESE_INPUT_BUILD
 
 }  // namespace

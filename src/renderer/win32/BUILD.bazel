@@ -49,7 +49,7 @@ mozc_win32_cc_prod_binary(
     name = "win32_renderer_main",
     srcs = ["win32_renderer_main.cc"],
     executable_name_map = {
-        "Mozc": "mozc_renderer.exe",
+        "Mozc": "JustType_renderer.exe",
         "GoogleJapaneseInput": "GoogleIMEJaRenderer.exe",
     },
     static_crt = False,
@@ -362,10 +362,10 @@ mozc_cc_library(
 
 # Registration of the bundled Gen Interface JP Display faces.
 #
-# The MSI installs the two faces under <MozcDir>\fonts; this registers them into
-# the calling process with FR_PRIVATE so the family the candidate window asks
-# for resolves whether or not the user installed it system-wide.  Nothing is
-# written to the system font table, so an uninstall leaves nothing behind.
+# The MSI installs the two faces under <JustTypeDir>\fonts; this registers them
+# into the calling process with FR_PRIVATE so the family the candidate window
+# asks for resolves whether or not the user installed it system-wide.  Nothing
+# is written to the system font table, so an uninstall leaves nothing behind.
 mozc_cc_library(
     name = "win32_font_resource",
     srcs = ["win32_font_resource.cc"],

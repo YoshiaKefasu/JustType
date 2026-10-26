@@ -33,7 +33,7 @@ namespace {
 // the family: a face that is not registered here is looked up by the host's
 // font resolution, which falls back to whatever the application would have
 // used, and the window then renders in a different typeface from the one the
-// config dialog previews.  mozc_renderer.exe has done this at startup all
+// config dialog previews.  JustType_renderer.exe has done this at startup all
 // along; the in-process renderer is the same drawing code, so it needs the
 // same registration.
 //

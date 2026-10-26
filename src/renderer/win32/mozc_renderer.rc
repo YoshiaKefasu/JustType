@@ -39,14 +39,14 @@ IDB_FOOTER_LOGO_COLOR_200  BITMAP    "data/images/win/candidate_window_logo_PBGR
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_INTERNAL_NAME "GoogleIMEJaRenderer"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_INTERNAL_NAME "mozc_renderer"
+    #define MOZC_RES_INTERNAL_NAME "JustType_renderer"
   #endif
 #endif
 #ifndef MOZC_RES_ORIGINAL_FILENAME
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_ORIGINAL_FILENAME "GoogleIMEJaRenderer.exe"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_ORIGINAL_FILENAME "mozc_renderer.exe"
+    #define MOZC_RES_ORIGINAL_FILENAME "JustType_renderer.exe"
   #endif
 #endif
 #ifndef MOZC_RES_FILE_DESCRIPTION

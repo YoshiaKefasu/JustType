@@ -43,9 +43,9 @@ constexpr wchar_t kForwarder[] = L"GoogleIMEJaTIP64X.dll";
 constexpr wchar_t kX64Implementation[] = L"GoogleIMEJaTIP64.dll";
 constexpr wchar_t kArm64Implementation[] = L"GoogleIMEJaTIP64Arm.dll";
 #else   // GOOGLE_JAPANESE_INPUT_BUILD
-constexpr wchar_t kForwarder[] = L"mozc_tip64x.dll";
-constexpr wchar_t kX64Implementation[] = L"mozc_tip64.dll";
-constexpr wchar_t kArm64Implementation[] = L"mozc_tip64arm.dll";
+constexpr wchar_t kForwarder[] = L"JustType_tip64x.dll";
+constexpr wchar_t kX64Implementation[] = L"JustType_tip64.dll";
+constexpr wchar_t kArm64Implementation[] = L"JustType_tip64arm.dll";
 #endif  // GOOGLE_JAPANESE_INPUT_BUILD
 
 #if defined(_M_ARM64)

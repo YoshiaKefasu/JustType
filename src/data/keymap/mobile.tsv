@@ -44,7 +44,9 @@ Composition	Henkan	Convert
 Composition	Hiragana	CompositionModeHiragana
 Composition	Home	MoveCursorToBeginning
 Composition	Kanji	IMEOff
-Composition	Katakana	CompositionModeFullKatakana
+# One-shot katakana conversion instead of pinning the input mode.  See the same
+# note in ms-ime.tsv.
+Composition	Katakana	ConvertToFullKatakana
 Composition	Left	MoveCursorLeft
 Composition	Muhenkan	SwitchKanaType
 Composition	OFF	IMEOff
@@ -106,7 +108,8 @@ Conversion	Henkan	ConvertNext
 Conversion	Hiragana	CompositionModeHiragana
 Conversion	Home	SegmentFocusFirst
 Conversion	Kanji	IMEOff
-Conversion	Katakana	CompositionModeFullKatakana
+# One-shot katakana conversion instead of pinning the input mode.
+Conversion	Katakana	ConvertToFullKatakana
 Conversion	Left	SegmentFocusLeft
 Conversion	Muhenkan	SwitchKanaType
 Conversion	OFF	IMEOff
@@ -147,7 +150,8 @@ Precomposition	Hankaku/Zenkaku	IMEOff
 Precomposition	Hiragana	CompositionModeHiragana
 Precomposition	Henkan	Reconvert
 Precomposition	Kanji	IMEOff
-Precomposition	Katakana	CompositionModeFullKatakana
+# Unbound on purpose: there is no composition to convert yet, and pinning the
+# input mode is no longer allowed.  See the same note in ms-ime.tsv.
 Precomposition	Muhenkan	CompositionModeSwitchKanaType
 Precomposition	OFF	IMEOff
 Precomposition	ON	IMEOn

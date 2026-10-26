@@ -33,14 +33,14 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_INTERNAL_NAME "GoogleIMEJaTool"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_INTERNAL_NAME "mozc_tool"
+    #define MOZC_RES_INTERNAL_NAME "JustType_tool"
   #endif
 #endif
 #ifndef MOZC_RES_ORIGINAL_FILENAME
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_ORIGINAL_FILENAME "GoogleIMEJaTool.exe"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_ORIGINAL_FILENAME "mozc_tool.exe"
+    #define MOZC_RES_ORIGINAL_FILENAME "JustType_tool.exe"
   #endif
 #endif
 #ifndef MOZC_RES_FILE_DESCRIPTION

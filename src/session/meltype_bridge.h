@@ -33,6 +33,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 
 #include "meltype/scored_segmenter.h"
 
@@ -59,6 +60,23 @@ class MeltypeBridge {
   static std::vector<mozkey::meltype::ScoredSegmenter::Segment> SegmentRomaji(
       const std::string& romaji, bool final);
 
+  // True when |letter|, typed right after |raw| while Mozc's temporary
+  // Shift+letter ASCII mode is active, is the first Japanese letter after a
+  // finished English word: "anoGithub Cli" + "w" is "あの Github Cli" +
+  // "をつかって", not a longer English word.
+  //
+  // This is the boundary the Composer cannot see on its own: Mozc's
+  // Shift+letter mode only knows "an uppercase letter started ASCII", and it
+  // keeps the run going until two shifted letters have been seen (see
+  // Composer::ApplyTemporaryInputMode), so "Github" (one shifted letter)
+  // leaves every following lowercase letter as raw ASCII.  Meltype knows where
+  // the English piece ends, so the Session asks it here and puts the Composer
+  // back into the user's real mode before the letter is inserted.
+  //
+  // False when the dictionaries are unavailable: without them there is no
+  // opinion, and the ASCII run continues exactly as before.
+  static bool EndsTemporaryShiftAsciiRun(std::string_view raw, char letter);
+
   // Starts loading the dictionaries on a background thread so that the first
   // keystroke does not stall for the multi-second synchronous load.  Loads
   // exactly once per process (std::call_once underneath); a later
@@ -75,6 +93,19 @@ class MeltypeBridge {
   // Loads the dictionaries on first use.  Returns the shared segmenter, or
   // nullptr when the data could not be found.
   static const mozkey::meltype::ScoredSegmenter* GetSegmenter();
+
+  // True when |lower| (already lowercased) is a complete word in the bundled
+  // English vocabulary.  False when the dictionaries are unavailable.
+  //
+  // The vocabulary is exactly what ScoredSegmenter itself judges English with:
+  // english + proper for the words, and all four lists (english, proper, spell,
+  // readable) for the prefix test below.  Keeping the two in sync is what makes
+  // "Meltype called this English" and "this is a finished word" agree.
+  static bool IsEnglishWord(std::string_view lower);
+
+  // True when some word in that vocabulary starts with |lower| (|lower| itself
+  // counts).  False when the dictionaries are unavailable.
+  static bool IsEnglishWordPrefix(std::string_view lower);
 
   static std::once_flag init_flag_;
   static std::unique_ptr<mozkey::meltype::MeltypeDictionaries> dictionaries_;

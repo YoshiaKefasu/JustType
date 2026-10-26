@@ -156,19 +156,20 @@ HRESULT TipLangBar::InitLangBar(TipLangBarCallback* text_service) {
 
   if (input_button_menu_ == nullptr) {
     // Add the "Input Mode" button.
+    //
+    // Only "Hiragana" and "Direct" are listed.  The fixed katakana and
+    // alphanumeric modes were removed on purpose: selecting them pinned the
+    // input mode until the user changed it back, which is the single most
+    // common way to end up typing "ＡＢＣ" or "ｱｲｳ" by accident.  Katakana and
+    // alphanumeric output is still reachable as a one-shot conversion
+    // (F7 / F8 / F9 / F10, Ctrl+I, ...), and every commit returns to Hiragana.
+    // TipLangBarCallback keeps the kFullKatakana / kHalfKatakana /
+    // kFullAlphanumeric / kHalfAlphanumeric ids because GetItemId() still maps
+    // those composition modes, and an InputScope from the application can
+    // still select them.
     constexpr TipLangBarMenuItem kInputMenu[] = {
         {kTipLangBarItemTypeDefault, TipLangBarCallback::kHiragana,
          IDS_HIRAGANA, IDI_HIRAGANA_NT, IDI_HIRAGANA},
-        {kTipLangBarItemTypeDefault, TipLangBarCallback::kFullKatakana,
-         IDS_FULL_KATAKANA, IDI_FULL_KATAKANA_NT, IDI_FULL_KATAKANA},
-        {kTipLangBarItemTypeDefault, TipLangBarCallback::kFullAlphanumeric,
-         IDS_FULL_ALPHANUMERIC, IDI_FULL_ALPHANUMERIC_NT,
-         IDI_FULL_ALPHANUMERIC},
-        {kTipLangBarItemTypeDefault, TipLangBarCallback::kHalfKatakana,
-         IDS_HALF_KATAKANA, IDI_HALF_KATAKANA_NT, IDI_HALF_KATAKANA},
-        {kTipLangBarItemTypeDefault, TipLangBarCallback::kHalfAlphanumeric,
-         IDS_HALF_ALPHANUMERIC, IDI_HALF_ALPHANUMERIC_NT,
-         IDI_HALF_ALPHANUMERIC},
         {kTipLangBarItemTypeRadioChecked, TipLangBarCallback::kDirect,
          IDS_DIRECT, IDI_DIRECT_NT, IDI_DIRECT},
         {kTipLangBarItemTypeSeparator, 0, 0, 0, 0},
@@ -195,19 +196,10 @@ HRESULT TipLangBar::InitLangBar(TipLangBarCallback* text_service) {
 
   if (!input_mode_button_for_win8_) {
     // Add the "Input Mode" button.
+    // Same two-mode menu as above, plus the tray-only tool items.
     constexpr TipLangBarMenuItem kInputMenu[] = {
         {kTipLangBarItemTypeDefault, TipLangBarCallback::kHiragana,
          IDS_HIRAGANA, IDI_HIRAGANA_NT, IDI_HIRAGANA},
-        {kTipLangBarItemTypeDefault, TipLangBarCallback::kFullKatakana,
-         IDS_FULL_KATAKANA, IDI_FULL_KATAKANA_NT, IDI_FULL_KATAKANA},
-        {kTipLangBarItemTypeDefault, TipLangBarCallback::kFullAlphanumeric,
-         IDS_FULL_ALPHANUMERIC, IDI_FULL_ALPHANUMERIC_NT,
-         IDI_FULL_ALPHANUMERIC},
-        {kTipLangBarItemTypeDefault, TipLangBarCallback::kHalfKatakana,
-         IDS_HALF_KATAKANA, IDI_HALF_KATAKANA_NT, IDI_HALF_KATAKANA},
-        {kTipLangBarItemTypeDefault, TipLangBarCallback::kHalfAlphanumeric,
-         IDS_HALF_ALPHANUMERIC, IDI_HALF_ALPHANUMERIC_NT,
-         IDI_HALF_ALPHANUMERIC},
         {kTipLangBarItemTypeDefault, TipLangBarCallback::kDirect, IDS_DIRECT,
          IDI_DIRECT_NT, IDI_DIRECT},
         {kTipLangBarItemTypeSeparator, 0, 0, 0, 0},

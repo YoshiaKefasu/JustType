@@ -63,7 +63,7 @@ namespace {
 constexpr std::wstring_view kSearchCandidateProviderName =
     L"Google Japanese Input";
 #else   // GOOGLE_JAPANESE_INPUT_BUILD
-constexpr std::wstring_view kSearchCandidateProviderName = L"Mozc";
+constexpr std::wstring_view kSearchCandidateProviderName = L"JustType";
 #endif  // GOOGLE_JAPANESE_INPUT_BUILD
 
 }  // namespace

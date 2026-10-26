@@ -54,7 +54,7 @@
 - scorer launches `llama-server` with `--parallel 1`
 - server binds to `127.0.0.1`
 - scorer supplies a generated API key
-- the Windows installer installs enabled outbound/block firewall rules for `mozc_zenz_scorer.exe` and `llama-server.exe`, in addition to the existing Mozc runtime rules
+- the Windows installer installs enabled outbound/block firewall rules for `mozc_zenz_scorer.exe` and `llama-server.exe`, in addition to the existing JustType runtime rules
 - the firewall rules must not break scorer-to-llama loopback inference and must be removed during uninstall
 - no `ggml.dll`, `ggml-base.dll`, `ggml-cpu.dll`, or `llama.dll` is packaged
 - `MSVCP140.dll` / `VCRUNTIME140*.dll` remain dynamic dependencies and are supplied through the existing architecture-specific MSI CRT payload.
@@ -71,12 +71,12 @@
 The final ARM64 MSI is also validated on native `windows-11-arm` with the
 installed payload, not source-tree binaries:
 
-- the seven Mozc outbound/block Windows Firewall rules are installed and point
-  to the actual installed executables
+- the seven JustType outbound/block Windows Firewall rules are installed and
+  point to the actual installed executables
 - the Zenz scorer-to-llama path continues to pass with the firewall rules enabled
 - scorer-owned `llama-server.exe` listens on loopback only
 - scorer / llama have no non-loopback TCP connection during the audit
-- uninstall removes the Zenz payload and the Mozc firewall rules
+- uninstall removes the Zenz payload and the JustType firewall rules
 
 ## Installer lifecycle gate
 
@@ -87,7 +87,7 @@ a normal MSI lifecycle on native `windows-11-arm`:
 - the predecessor contains the historical x64 `llama-server.exe` and the four
   legacy ggml / llama DLLs
 - installing the current MSI over that predecessor replaces the ProductCode
-  while preserving the Mozc UpgradeCode
+  while preserving the JustType UpgradeCode
 - the upgraded payload contains the native ARM64 llama/scorer runtime
 - the four legacy runtime DLLs are removed
 - the post-upgrade scorer context E2E gate passes
@@ -98,14 +98,14 @@ a normal MSI lifecycle on native `windows-11-arm`:
 
 Development CI artifacts can have the same ProductVersion while validating the
 upgrade mechanics. A published release must increase ProductVersion relative to
-the previous published release, use a new ProductCode, and preserve the Mozc
-UpgradeCode.
+the previous published release, use a new ProductCode, and preserve the
+JustType UpgradeCode.
 
 ## Current install-directory compatibility note
 
-The current WiX layout keeps `MozcDir` under `ProgramFilesFolder\Mozc` for
-compatibility with the existing product layout. On 64-bit Windows this can
-resolve to `C:\Program Files (x86)\Mozc`. Runtime architecture is therefore
+The current WiX layout keeps `JustTypeDir` under `ProgramFilesFolder\JustType`
+for compatibility with the existing product layout. On 64-bit Windows this can
+resolve to `C:\Program Files (x86)\JustType`. Runtime architecture is therefore
 verified from PE identity and hashes, not inferred from the directory name.
 
 Changing this directory contract to `ProgramFiles64Folder` is outside this

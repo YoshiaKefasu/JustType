@@ -2278,7 +2278,14 @@ TEST_F(ComposerTest, Issue2797991Case3) {
   // This is a unittest against http://b/2797991.
   // Half-width alphanumeric mode quits after [CAPITAL LETTER]:[CAPITAL LETTER]
   // e.g. C:\Wi -> C:\Wい
-
+  //
+  // The echoed HIRAGANA mode here no longer ends the temporary Shift+letter
+  // ASCII run. That run is a detail of the word being typed, and letting a key
+  // event's mode end it tore English words apart ("Todo" became "Toお") and
+  // let the client overwrite |comeback_input_mode_|, which locked the IME in
+  // _A. The run now ends only where the input itself says it does: the shifted
+  // sequence rule in ApplyTemporaryInputMode(), or the Session's Meltype
+  // boundary check. Case1 already covers the plain "C:\Wi" form.
   table_->AddRule("i", "い", "");
 
   InsertKey("C", composer_.get());
@@ -2287,7 +2294,30 @@ TEST_F(ComposerTest, Issue2797991Case3) {
   InsertKey("W", composer_.get());
   InsertKey("i", composer_.get());
   InsertKeyWithMode("i", commands::HIRAGANA, composer_.get());
-  EXPECT_EQ(composer_->GetStringForPreedit(), "C:\\Wiい");
+  EXPECT_EQ(composer_->GetStringForPreedit(), "C:\\Wii");
+}
+
+TEST_F(ComposerTest, TemporaryShiftAsciiRunSurvivesEchoedMode) {
+  // The _A lock came from the echoed mode: the TSF client publishes the mode it
+  // believes is active, and a temporary Shift+letter run used to honour it,
+  // overwriting |comeback_input_mode_| with HALF_ASCII. The run must survive
+  // the echo so the rest of the word stays ASCII and Japanese remains reachable.
+  table_->AddRule("o", "お", "");
+
+  // Shift+T starts the temporary ASCII run.
+  InsertKey("T", composer_.get());
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+  EXPECT_EQ(composer_->GetComebackInputMode(), transliteration::HIRAGANA);
+
+  // An echoed ASCII mode must not become the comeback mode.
+  EXPECT_TRUE(InsertKeyWithMode("o", commands::HALF_ASCII, composer_.get()));
+  EXPECT_EQ(composer_->GetComebackInputMode(), transliteration::HIRAGANA);
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+
+  // An echoed Japanese mode must not tear the word apart either.
+  EXPECT_TRUE(InsertKeyWithMode("d", commands::HIRAGANA, composer_.get()));
+  EXPECT_EQ(composer_->GetComebackInputMode(), transliteration::HIRAGANA);
+  EXPECT_EQ(composer_->GetStringForPreedit(), "Tod");
 }
 
 TEST_F(ComposerTest, Issue2797991Case4) {

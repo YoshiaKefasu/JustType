@@ -44,7 +44,11 @@ Composition	Henkan	Convert
 Composition	Hiragana	CompositionModeHiragana
 Composition	Home	MoveCursorToBeginning
 Composition	Kanji	IMEOff
-Composition	Katakana	CompositionModeFullKatakana
+# The Katakana key used to select CompositionModeFullKatakana, which pinned the
+# input mode to katakana until the user changed it back -- the easiest way to
+# end up typing "アイウ" by accident.  It is now a one-shot conversion of the
+# current composition, exactly like F7, and the next commit returns to Hiragana.
+Composition	Katakana	ConvertToFullKatakana
 Composition	Left	MoveCursorLeft
 Composition	Muhenkan	SwitchKanaType
 Composition	OFF	IMEOff
@@ -106,7 +110,8 @@ Conversion	Henkan	ConvertNext
 Conversion	Hiragana	CompositionModeHiragana
 Conversion	Home	SegmentFocusFirst
 Conversion	Kanji	IMEOff
-Conversion	Katakana	CompositionModeFullKatakana
+# One-shot katakana conversion, like F7.  See the note in Composition above.
+Conversion	Katakana	ConvertToFullKatakana
 Conversion	Left	SegmentFocusLeft
 Conversion	Muhenkan	SwitchKanaType
 Conversion	OFF	IMEOff
@@ -147,7 +152,10 @@ Precomposition	Hankaku/Zenkaku	IMEOff
 Precomposition	Hiragana	CompositionModeHiragana
 Precomposition	Henkan	Reconvert
 Precomposition	Kanji	IMEOff
-Precomposition	Katakana	CompositionModeFullKatakana
+# The Katakana key is deliberately left unbound here.  There is no composition
+# to convert yet, so the only thing it could do is pin the input mode -- which
+# is exactly what it used to do and what this keymap no longer allows.  The key
+# is echoed back to the application like any other unbound key.
 Precomposition	Muhenkan	CompositionModeSwitchKanaType
 Precomposition	OFF	IMEOff
 Precomposition	ON	IMEOn

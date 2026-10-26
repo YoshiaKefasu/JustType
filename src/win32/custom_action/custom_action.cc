@@ -33,7 +33,7 @@
 #include <windows.h>
 #include <atlbase.h>
 #include <msiquery.h>
-#include <tlhelp32.h>
+#include <shlobj.h>
 #include <wow64apiset.h>
 // clang-format on
 
@@ -44,7 +44,6 @@
 #include <string_view>
 #include <vector>
 
-#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "base/const.h"
 #include "base/process.h"
@@ -88,86 +87,85 @@ using mozc::win32::OmahaUtil;
 
 HMODULE g_module = nullptr;
 
-std::wstring GetMozcComponentPath(const absl::string_view filename) {
-  return mozc::win32::Utf8ToWide(
-      absl::StrCat(mozc::SystemUtil::GetServerDirectory(), "\\", filename));
+// Returns the absolute path of |filename| under |install_dir|.
+std::wstring GetComponentPath(const std::wstring& install_dir,
+                              const absl::string_view filename) {
+  if (install_dir.empty()) {
+    return L"";
+  }
+  return mozc::win32::StrCatW(install_dir, L"\\",
+                              mozc::win32::Utf8ToWide(filename));
 }
 
-bool StringEqualsIgnoreCase(std::wstring_view lhs, std::wstring_view rhs) {
-  if (lhs.size() != rhs.size()) {
+// Returns the machine-wide Program Files directory for |csidl|, which is either
+// CSIDL_PROGRAM_FILES or CSIDL_PROGRAM_FILESX86, or an empty string on failure.
+std::wstring GetProgramFilesDirectory(int csidl) {
+  wchar_t buffer[MAX_PATH] = {};
+  const HRESULT result =
+      ::SHGetFolderPathW(nullptr, csidl | CSIDL_FLAG_DONT_VERIFY, nullptr,
+                         SHGFP_TYPE_CURRENT, buffer);
+  if (FAILED(result)) {
+    return L"";
+  }
+  return buffer;
+}
+
+bool IsExistingFile(const std::wstring& path) {
+  if (path.empty()) {
     return false;
   }
-
-  return ::CompareStringOrdinal(
-             lhs.data(),
-             static_cast<int>(lhs.size()),
-             rhs.data(),
-             static_cast<int>(rhs.size()),
-             TRUE) == CSTR_EQUAL;
+  const DWORD attributes = ::GetFileAttributesW(path.c_str());
+  return attributes != INVALID_FILE_ATTRIBUTES &&
+         (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
-std::wstring GetProcessImagePath(DWORD process_id) {
-  HANDLE process = ::OpenProcess(
-      PROCESS_QUERY_LIMITED_INFORMATION,
-      FALSE,
-      process_id);
-  if (process == nullptr) {
-    return L"";
+// Normalizes a directory value so that it can be concatenated with a file name
+// using a single separator. Directory properties such as [JustTypeDir] may be
+// resolved with a trailing separator, and a value can be quoted.
+std::wstring NormalizeDirectory(std::wstring dir) {
+  size_t begin = 0;
+  while (begin < dir.size() && (dir[begin] == L'"' || dir[begin] == L' ')) {
+    ++begin;
   }
+  dir.erase(0, begin);
 
-  wchar_t path[MAX_PATH] = {};
-  DWORD size = std::size(path);
-  if (!::QueryFullProcessImageNameW(process, 0, path, &size)) {
-    ::CloseHandle(process);
-    return L"";
+  while (!dir.empty()) {
+    const wchar_t last = dir.back();
+    if (last != L'\\' && last != L'/' && last != L'"' && last != L' ') {
+      break;
+    }
+    dir.pop_back();
   }
-
-  ::CloseHandle(process);
-  return std::wstring(path, size);
+  return dir;
 }
 
-void TerminateMozcProcessByImageName(const wchar_t* image_name,
-                                     const char* mozc_filename) {
-  HANDLE snapshot = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (snapshot == INVALID_HANDLE_VALUE) {
-    return;
+// Returns true if |install_dir| actually contains the 64-bit TIP DLL, which is
+// the minimum evidence that the directory is a live JustType installation.
+bool HasTipDll(const std::wstring& install_dir) {
+  return IsExistingFile(GetComponentPath(install_dir, mozc::kMozcTIP64));
+}
+
+// Returns the product directory under the machine-wide Program Files directory
+// identified by |csidl| (CSIDL_PROGRAM_FILES or CSIDL_PROGRAM_FILESX86), or an
+// empty string when that directory cannot be resolved.
+//
+// This mirrors the default branch of SystemUtil::GetServerDirectory() without
+// consulting the registry, which is the point of this file's resolution logic.
+std::wstring GetProductDirectory(int csidl) {
+  const std::wstring program_files = GetProgramFilesDirectory(csidl);
+  if (program_files.empty()) {
+    return L"";
   }
-
-  const std::wstring expected_path = GetMozcComponentPath(mozc_filename);
-
-  PROCESSENTRY32W entry = {};
-  entry.dwSize = sizeof(entry);
-
-  if (!::Process32FirstW(snapshot, &entry)) {
-    ::CloseHandle(snapshot);
-    return;
-  }
-
-  do {
-    if (!StringEqualsIgnoreCase(entry.szExeFile, image_name)) {
-      continue;
-    }
-
-    const std::wstring actual_path = GetProcessImagePath(entry.th32ProcessID);
-    if (actual_path.empty() ||
-        !StringEqualsIgnoreCase(actual_path, expected_path)) {
-      continue;
-    }
-
-    HANDLE process = ::OpenProcess(
-        PROCESS_TERMINATE | SYNCHRONIZE,
-        FALSE,
-        entry.th32ProcessID);
-    if (process == nullptr) {
-      continue;
-    }
-
-    ::TerminateProcess(process, 0);
-    ::WaitForSingleObject(process, 3000);
-    ::CloseHandle(process);
-  } while (::Process32NextW(snapshot, &entry));
-
-  ::CloseHandle(snapshot);
+#if defined(GOOGLE_JAPANESE_INPUT_BUILD)
+  return mozc::win32::StrCatW(
+      program_files, L"\\",
+      mozc::win32::Utf8ToWide(mozc::kCompanyNameInEnglish), L"\\",
+      mozc::win32::Utf8ToWide(mozc::kProductNameInEnglish));
+#else   // GOOGLE_JAPANESE_INPUT_BUILD
+  return mozc::win32::StrCatW(
+      program_files, L"\\",
+      mozc::win32::Utf8ToWide(mozc::kProductNameInEnglish));
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
 }
 
 // Retrieves the value for an installer property.
@@ -236,6 +234,40 @@ std::wstring FormatMessageByResourceId(int resourceID, ...) {
 std::wstring GetVersionHeader() {
   return FormatMessageByResourceId(IDS_FORMAT_VERSION_INFO,
                                    mozc::Version::GetMozcVersionW().c_str());
+}
+
+// Resolves the directory JustType is installed into.
+//
+// The CLSID\InProcServer32 registry value is deliberately not consulted here.
+// During an upgrade that value still points at the previous installation, so
+// reading it made the installer re-register the stale directory: a circular
+// dependency that also survived the Mozc to JustType rename, because a package
+// that put the DLLs under Program Files (x86) kept pulling that path back in.
+//
+// Sources, in priority order:
+//   1. CustomActionData, i.e. [JustTypeDir] of the package being installed.
+//   2. %ProgramFiles%\JustType, when it already holds the 64-bit TIP DLL.
+//   3. %ProgramFiles(x86)%\JustType, when it already holds the 64-bit TIP DLL
+//      (a legacy layout that has not been migrated yet).
+//   4. %ProgramFiles%\JustType, the directory this package installs into.
+//
+// The fallback candidates are verified by file existence so that a leftover
+// directory from an old Mozc installation is never mistaken for this product.
+std::wstring ResolveInstallDirectory(MSIHANDLE msi) {
+  const std::wstring from_installer =
+      NormalizeDirectory(GetProperty(msi, L"CustomActionData"));
+  if (!from_installer.empty()) {
+    return from_installer;
+  }
+
+  for (const int csidl : {CSIDL_PROGRAM_FILES, CSIDL_PROGRAM_FILESX86}) {
+    const std::wstring candidate = GetProductDirectory(csidl);
+    if (HasTipDll(candidate)) {
+      return candidate;
+    }
+  }
+
+  return GetProductDirectory(CSIDL_PROGRAM_FILES);
 }
 
 bool WriteOmahaErrorById(int resource_id) {
@@ -345,12 +377,15 @@ struct MozcFirewallRule {
 };
 
 constexpr MozcFirewallRule kMozcOfflineFirewallRules[] = {
-    {L"Mozc Offline - Block mozc_server outbound", "mozc_server.exe"},
-    {L"Mozc Offline - Block mozc_tool outbound", "mozc_tool.exe"},
-    {L"Mozc Offline - Block mozc_renderer outbound", "mozc_renderer.exe"},
-    {L"Mozc Offline - Block mozc_broker outbound", "mozc_broker.exe"},
-    {L"Mozc Offline - Block mozc_cache_service outbound",
-     "mozc_cache_service.exe"},
+    {L"JustType Offline - Block JustType_server outbound",
+     "JustType_server.exe"},
+    {L"JustType Offline - Block JustType_tool outbound", "JustType_tool.exe"},
+    {L"JustType Offline - Block JustType_renderer outbound",
+     "JustType_renderer.exe"},
+    {L"JustType Offline - Block JustType_broker outbound",
+     "JustType_broker.exe"},
+    {L"JustType Offline - Block JustType_cache_service outbound",
+     "JustType_cache_service.exe"},
 };
 
 void DeleteFirewallRule(std::wstring_view rule_name) {
@@ -405,25 +440,27 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD ul_reason_for_call,
 // [Return='ignore']
 UINT __stdcall EnsureAllApplicationPackagesPermisssions(MSIHANDLE msi_handle) {
   DEBUG_BREAK_FOR_DEBUGGER();
-  if (!mozc::WinSandbox::EnsureAllApplicationPackagesPermisssion(
-          GetMozcComponentPath(mozc::kMozcServerName),
-          mozc::WinSandbox::AppContainerVisibilityType::kProgramFiles)) {
-    return ERROR_INSTALL_FAILURE;
-  }
-  if (!mozc::WinSandbox::EnsureAllApplicationPackagesPermisssion(
-          GetMozcComponentPath(mozc::kMozcRenderer),
-          mozc::WinSandbox::AppContainerVisibilityType::kProgramFiles)) {
-    return ERROR_INSTALL_FAILURE;
-  }
-  if (!mozc::WinSandbox::EnsureAllApplicationPackagesPermisssion(
-          GetMozcComponentPath(mozc::kMozcTIP32),
-          mozc::WinSandbox::AppContainerVisibilityType::kProgramFiles)) {
-    return ERROR_INSTALL_FAILURE;
-  }
-  if (!mozc::WinSandbox::EnsureAllApplicationPackagesPermisssion(
-          GetMozcComponentPath(mozc::kMozcTIP64),
-          mozc::WinSandbox::AppContainerVisibilityType::kProgramFiles)) {
-    return ERROR_INSTALL_FAILURE;
+  const std::wstring install_dir = ResolveInstallDirectory(msi_handle);
+  constexpr const char* kComponents[] = {
+      mozc::kMozcServerName,
+      mozc::kMozcRenderer,
+      mozc::kMozcTIP32,
+      mozc::kMozcTIP64,
+      // Only present in the universal installer; RegisterTIP may register it as
+      // the in-proc server on ARM64, so it needs the same visibility.
+      mozc::kMozcTIP64X,
+  };
+  for (const char* component : kComponents) {
+    const std::wstring path = GetComponentPath(install_dir, component);
+    if (!IsExistingFile(path)) {
+      // Nothing to grant access to. InstallFiles has already installed every
+      // vital component, so this only skips files that are genuinely absent.
+      continue;
+    }
+    if (!mozc::WinSandbox::EnsureAllApplicationPackagesPermisssion(
+            path, mozc::WinSandbox::AppContainerVisibilityType::kProgramFiles)) {
+      return ERROR_INSTALL_FAILURE;
+    }
   }
   return ERROR_SUCCESS;
 }
@@ -614,11 +651,19 @@ UINT __stdcall StopCacheService(MSIHANDLE msi_handle) {
 }
 
 // [Return='ignore']
-UINT __stdcall InstallMozcFirewallRules(MSIHANDLE msi_handle) {
+UINT __stdcall InstallJustTypeFirewallRules(MSIHANDLE msi_handle) {
   DEBUG_BREAK_FOR_DEBUGGER();
 
+  const std::wstring install_dir = ResolveInstallDirectory(msi_handle);
   for (const MozcFirewallRule& rule : kMozcOfflineFirewallRules) {
-    AddFirewallRule(rule.name, GetMozcComponentPath(rule.filename));
+    const std::wstring program = GetComponentPath(install_dir, rule.filename);
+    if (program.empty()) {
+      continue;
+    }
+    // AddFirewallRule deletes the rule with the same name first, so a rule
+    // that still points at the previous installation is replaced even when the
+    // executable is not there yet.
+    AddFirewallRule(rule.name, program);
   }
 
   // Firewall rule installation is best-effort. Do not block MSI installation
@@ -627,7 +672,7 @@ UINT __stdcall InstallMozcFirewallRules(MSIHANDLE msi_handle) {
 }
 
 // [Return='ignore']
-UINT __stdcall RemoveMozcFirewallRules(MSIHANDLE msi_handle) {
+UINT __stdcall RemoveJustTypeFirewallRules(MSIHANDLE msi_handle) {
   DEBUG_BREAK_FOR_DEBUGGER();
 
   for (const MozcFirewallRule& rule : kMozcOfflineFirewallRules) {
@@ -679,6 +724,8 @@ UINT __stdcall RegisterTIP(MSIHANDLE msi_handle) {
   mozc::ScopedCOMInitializer com_initializer;
   HRESULT result = S_OK;
 
+  const std::wstring install_dir = ResolveInstallDirectory(msi_handle);
+
   // Register 64-bit TIP COM server.
   // Unlike 32-bit TIP DLL, which is always x86, the expected 64-bit TIP DLL
   // can be x64 or ARM64X depending on the target environment.
@@ -688,8 +735,21 @@ UINT __stdcall RegisterTIP(MSIHANDLE msi_handle) {
                            &native_machine);
   const bool is_arm64_machine =
       SUCCEEDED(result) && native_machine == IMAGE_FILE_MACHINE_ARM64;
-  const std::wstring tip64_path = GetMozcComponentPath(
+  std::wstring tip64_path = GetComponentPath(
+      install_dir,
       is_arm64_machine ? mozc::kMozcTIP64X : mozc::kMozcTIP64);
+  if (!IsExistingFile(tip64_path) && is_arm64_machine) {
+    // The ARM64X build is only installed by the universal installer. Fall back
+    // to the plain x64 TIP DLL when only that one is present.
+    tip64_path = GetComponentPath(install_dir, mozc::kMozcTIP64);
+  }
+  if (!IsExistingFile(tip64_path)) {
+    // Never register a COM server that does not exist: TSF would keep loading
+    // the stale entry of the previous installation instead.
+    LOG_ERROR_FOR_OMAHA();
+    UnregisterTIP(msi_handle);
+    return ERROR_INSTALL_FAILURE;
+  }
 
   result = mozc::win32::TsfRegistrar::RegisterCOMServer(
       tip64_path.c_str(), tip64_path.length(),
@@ -701,7 +761,13 @@ UINT __stdcall RegisterTIP(MSIHANDLE msi_handle) {
   }
 
   // Register 32-bit TIP COM server.
-  const std::wstring tip32_path = GetMozcComponentPath(mozc::kMozcTIP32);
+  const std::wstring tip32_path =
+      GetComponentPath(install_dir, mozc::kMozcTIP32);
+  if (!IsExistingFile(tip32_path)) {
+    LOG_ERROR_FOR_OMAHA();
+    UnregisterTIP(msi_handle);
+    return ERROR_INSTALL_FAILURE;
+  }
   result = mozc::win32::TsfRegistrar::RegisterCOMServer(
       tip32_path.c_str(), tip32_path.length(),
       mozc::win32::COMServerBitness::k32bit);

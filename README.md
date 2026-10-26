@@ -66,10 +66,10 @@ DirectWrite および GDI 双方で美しくアンチエイリアス描画され
 Windows 向けのインストーラー（MSI）は [Releases](https://github.com/YoshiaKefasu/JustType/releases) からダウンロードできます。
 
 ### インストール方法
-`Mozc64.msi` をダウンロードし、ダブルクリックするか以下のコマンドを実行してください：
+`JustType64.msi` をダウンロードし、ダブルクリックするか以下のコマンドを実行してください：
 
 ```powershell
-Start-Process msiexec.exe -ArgumentList "/i Mozc64.msi /norestart" -Verb RunAs
+Start-Process msiexec.exe -ArgumentList "/i JustType64.msi /norestart" -Verb RunAs
 ```
 
 ※ インストーラーには `REBOOT=ReallySuppress` が設定されており、インストール完了時に OS の勝手な再起動は一切発生しません。
@@ -99,7 +99,7 @@ Set-Location "src"
 bazelisk --batch build package --config release_build
 ```
 
-ビルド完了後、`src/bazel-bin/win32/installer/Mozc64.msi` に成果物が生成されます。
+ビルド完了後、`src/bazel-bin/win32/installer/JustType64.msi` に成果物が生成されます。
 
 <br>
 

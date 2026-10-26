@@ -108,7 +108,7 @@ bool LaunchMozcToolInternal(absl::string_view tool_name, absl::string_view error
     // Otherwise, we tries to invoke the application by settings FLAGS_mode.
     // use --fromenv option to specify tool name
     setenv("FLAGS_mode", std::string(tool_name).c_str(), 1);
-    toolAppPath = [toolAppPath stringByAppendingPathComponent:@kProductPrefix "Tool.app"];
+    toolAppPath = [toolAppPath stringByAppendingPathComponent:@kMacBundlePrefix "Tool.app"];
   }
 
   bool succeeded = [[NSWorkspace sharedWorkspace] launchApplication:toolAppPath];

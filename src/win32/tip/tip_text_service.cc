@@ -200,9 +200,9 @@ constexpr GUID kTipFunctionProvider = {
 
 constexpr char kHelpUrl[] = "https://github.com/YoshiaKefasu/JustType";
 constexpr wchar_t kTaskWindowClassName[] =
-    L"Mozc Immersive Task Message Window";
+    L"JustType Immersive Task Message Window";
 constexpr wchar_t kThemeWindowClassName[] =
-    L"Mozc Theme Change Window";
+    L"JustType Theme Change Window";
 
 // {F16B7D92-84B0-4AC6-A35B-06EA77180A18}
 constexpr GUID kTipPreservedKey_Kanji = {

@@ -70,7 +70,7 @@ BEGIN
   IDS_UNEXPECTED_ERROR          "未知のエラーが発生しました。"
   IDS_FORMAT_FUNCTION_AND_LINE  "%1!s! (%2!u!) でエラーが発生したため、インストールを中止しました。"
 #elif defined(MOZC_BUILD)
-  IDS_FORMAT_VERSION_INFO       "Mozc インストーラー (バージョン %1!s!)"
+  IDS_FORMAT_VERSION_INFO       "JustType インストーラー (バージョン %1!s!)"
   IDS_UNEXPECTED_ERROR          "未知のエラーが発生しました。"
   IDS_FORMAT_FUNCTION_AND_LINE  "%1!s! (%2!u!) でエラーが発生したため、インストールを中止しました。"
 #endif
@@ -83,7 +83,7 @@ BEGIN
   IDS_UNEXPECTED_ERROR          "An unknown error occurred."
   IDS_FORMAT_FUNCTION_AND_LINE  "The installation was stopped because of an error at %1!s! (%2!u!)"
 #elif defined(MOZC_BUILD)
-  IDS_FORMAT_VERSION_INFO       "Mozc Installer (Ver. %1!s!)"
+  IDS_FORMAT_VERSION_INFO       "JustType Installer (Ver. %1!s!)"
   IDS_UNEXPECTED_ERROR          "An unknown error occurred."
   IDS_FORMAT_FUNCTION_AND_LINE  "The installation was stopped because of an error at %1!s! (%2!u!)"
 #endif

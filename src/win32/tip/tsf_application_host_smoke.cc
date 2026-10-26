@@ -908,29 +908,29 @@ int wmain() {
       L"foreground_service_is_mozkey=%ls\n",
       foreground_service_is_mozkey ? L"true" : L"false");
 
-  const bool mozc_tip64arm_loaded =
-      ::GetModuleHandleW(L"mozc_tip64arm.dll") != nullptr;
-  const bool mozc_tip64_loaded =
-      ::GetModuleHandleW(L"mozc_tip64.dll") != nullptr;
-  const bool mozc_tip64x_loaded =
-      ::GetModuleHandleW(L"mozc_tip64x.dll") != nullptr;
+  const bool justtype_tip64arm_loaded =
+      ::GetModuleHandleW(L"JustType_tip64arm.dll") != nullptr;
+  const bool justtype_tip64_loaded =
+      ::GetModuleHandleW(L"JustType_tip64.dll") != nullptr;
+  const bool justtype_tip64x_loaded =
+      ::GetModuleHandleW(L"JustType_tip64x.dll") != nullptr;
 
   std::wprintf(
-      L"mozc_tip64arm_loaded=%ls\n",
-      mozc_tip64arm_loaded ? L"true" : L"false");
+      L"justtype_tip64arm_loaded=%ls\n",
+      justtype_tip64arm_loaded ? L"true" : L"false");
   std::wprintf(
-      L"mozc_tip64_loaded=%ls\n",
-      mozc_tip64_loaded ? L"true" : L"false");
+      L"justtype_tip64_loaded=%ls\n",
+      justtype_tip64_loaded ? L"true" : L"false");
   std::wprintf(
-      L"mozc_tip64x_loaded=%ls\n",
-      mozc_tip64x_loaded ? L"true" : L"false");
+      L"justtype_tip64x_loaded=%ls\n",
+      justtype_tip64x_loaded ? L"true" : L"false");
 
   const bool sink_advised = store->sink_advised();
   std::wprintf(L"text_store_sink_advised=%ls\n",
                sink_advised ? L"true" : L"false");
 
   const bool arm64_tip_ok =
-      mozc_tip64arm_loaded && !mozc_tip64_loaded;
+      justtype_tip64arm_loaded && !justtype_tip64_loaded;
 
   int result = 0;
   if (!active_profile_is_mozkey) {

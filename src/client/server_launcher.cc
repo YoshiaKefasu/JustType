@@ -170,7 +170,7 @@ bool ServerLauncher::StartServer(ClientInterface *client) {
   }
 
   // Common part:
-  // Wait until mozc_server becomes ready to process requests
+  // Wait until JustType_server becomes ready to process requests
   if (listener_is_available) {
     const int ret = listener.WaitEventOrProcess(kServerWaitTimeout, pid);
     switch (ret) {
@@ -183,20 +183,21 @@ bool ServerLauncher::StartServer(ClientInterface *client) {
                      << "within " << kServerWaitTimeout << " msec";
         break;
       case NamedEventListener::PROCESS_SIGNALED:
-        LOG(ERROR) << "Mozc server is terminated";
-        // Mozc may be terminated because another client launches mozc_server
+        LOG(ERROR) << "JustType server is terminated";
+        // JustType may be terminated because another client launches
+        // JustType_server
         if (client->PingServer()) {
           return true;
         }
         return false;
     }
   } else {
-    // maybe another process is trying to launch mozc_server.
+    // maybe another process is trying to launch JustType_server.
     LOG(ERROR) << "cannot make NamedEventListener ";
     absl::SleepFor(kRetryIntervalForServer);
   }
 
-  // Try to connect mozc_server just in case.
+  // Try to connect JustType_server just in case.
   for (int trial = 0; trial < kTrial; ++trial) {
     if (client->PingServer()) {
       return true;

@@ -16,7 +16,8 @@
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
 # ARE DISCLAIMED.
 
-# Gen Interface JP Display faces, shipped inside the MSI under <MozcDir>\fonts.
+# Gen Interface JP Display faces, shipped inside the MSI under
+# <JustTypeDir>\fonts.
 #
 # The candidate window and the config dialog both ask for the family by name
 # and register these files per process (AddFontResourceExW with FR_PRIVATE on

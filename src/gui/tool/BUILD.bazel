@@ -134,7 +134,7 @@ mozc_cc_qt_binary(
 mozc_win32_cc_prod_binary(
     name = "mozc_tool_win",
     executable_name_map = {
-        "Mozc": "mozc_tool.exe",
+        "Mozc": "JustType_tool.exe",
         "GoogleJapaneseInput": "GoogleIMEJaTool.exe",
     },
     static_crt = False,
@@ -150,7 +150,7 @@ mozc_win32_cc_prod_binary(
 
 mozc_macos_qt_application(
     name = "mozc_tool_macos",
-    bundle_name = "MozcTool",
+    bundle_name = BRANDING + "Tool",
     deps = [":mozc_tool_main_lib"],
 )
 

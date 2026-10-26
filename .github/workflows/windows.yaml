@@ -151,11 +151,11 @@ jobs:
         run: |
           bazelisk build --config release_build package
 
-      - name: upload Mozc64_x64.msi
+      - name: upload JustType64_x64.msi
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_x64.msi
-          path: src/bazel-bin/win32/installer/Mozc64.msi
+          name: JustType64_x64.msi
+          path: src/bazel-bin/win32/installer/JustType64.msi
           if-no-files-found: warn
 
   build_universal:
@@ -266,11 +266,11 @@ jobs:
         run: |
           bazelisk build --config release_build --config win_universal_installer package
 
-      - name: upload Mozc64_universal.msi
+      - name: upload JustType64_universal.msi
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_universal.msi
-          path: src/bazel-bin/win32/installer/Mozc64.msi
+          name: JustType64_universal.msi
+          path: src/bazel-bin/win32/installer/JustType64.msi
           if-no-files-found: warn
 
   build_arm64:
@@ -381,11 +381,11 @@ jobs:
         run: |
           bazelisk build package --config release_build
 
-      - name: upload Mozc64_arm64.msi
+      - name: upload JustType64_arm64.msi
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_arm64.msi
-          path: src/bazel-bin/win32/installer/Mozc64.msi
+          name: JustType64_arm64.msi
+          path: src/bazel-bin/win32/installer/JustType64.msi
           if-no-files-found: warn
 
   build_arm64_lifecycle_baseline:
@@ -510,7 +510,7 @@ jobs:
             throw "Cross-parity warm-up source mismatch: $head"
           }
 
-          $msi = ".\src\bazel-bin\win32\installer\Mozc64.msi"
+          $msi = ".\src\bazel-bin\win32\installer\JustType64.msi"
           if (-not (Test-Path $msi -PathType Leaf)) {
             throw "Current-source x64-host ARM64 warm-up MSI was not produced."
           }
@@ -521,8 +521,8 @@ jobs:
       - name: upload x64-host current ARM64 parity MSI
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_arm64_x64_cross_parity.msi
-          path: src/bazel-bin/win32/installer/Mozc64.msi
+          name: JustType64_arm64_x64_cross_parity.msi
+          path: src/bazel-bin/win32/installer/JustType64.msi
           if-no-files-found: error
           retention-days: 3
 
@@ -571,7 +571,7 @@ jobs:
             Pop-Location
           }
 
-          $baselineMsi = ".\src\bazel-bin\win32\installer\Mozc64.msi"
+          $baselineMsi = ".\src\bazel-bin\win32\installer\JustType64.msi"
           if (-not (Test-Path $baselineMsi -PathType Leaf)) {
             throw "Baseline MSI was not produced."
           }
@@ -579,11 +579,11 @@ jobs:
           Write-Host "Baseline commit = $actual"
           Write-Host "Baseline MSI SHA256 = $((Get-FileHash $baselineMsi -Algorithm SHA256).Hash)"
 
-      - name: upload Mozc64_arm64 W2-predecessor lifecycle baseline
+      - name: upload JustType64_arm64 W2-predecessor lifecycle baseline
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_arm64_pre_native_lifecycle_baseline.msi
-          path: src/bazel-bin/win32/installer/Mozc64.msi
+          name: JustType64_arm64_pre_native_lifecycle_baseline.msi
+          path: src/bazel-bin/win32/installer/JustType64.msi
           if-no-files-found: error
 
   test_arm64_cross_native_parity:
@@ -604,13 +604,13 @@ jobs:
       - name: Download native ARM64 MSI
         uses: actions/download-artifact@v6
         with:
-          name: Mozc64_arm64.msi
+          name: JustType64_arm64.msi
           path: ${{ runner.temp }}\mozkey-native-arm64-parity
 
       - name: Download x64-host cross-built ARM64 MSI
         uses: actions/download-artifact@v6
         with:
-          name: Mozc64_arm64_x64_cross_parity.msi
+          name: JustType64_arm64_x64_cross_parity.msi
           path: ${{ runner.temp }}\mozkey-cross-arm64-parity
 
       - name: Compare native and x64-host cross ARM64 package contracts
@@ -625,7 +625,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_arm64_cross_native_parity_audit
+          name: JustType64_arm64_cross_native_parity_audit
           path: ${{ runner.temp }}\mozkey-arm64-cross-native-parity-evidence
           if-no-files-found: warn
           retention-days: 7
@@ -648,13 +648,13 @@ jobs:
       - name: Download current ARM64 MSI
         uses: actions/download-artifact@v6
         with:
-          name: Mozc64_arm64.msi
+          name: JustType64_arm64.msi
           path: ${{ runner.temp }}\mozkey-current-arm64-msi
 
       - name: Download W2-predecessor ARM64 MSI
         uses: actions/download-artifact@v6
         with:
-          name: Mozc64_arm64_pre_native_lifecycle_baseline.msi
+          name: JustType64_arm64_pre_native_lifecycle_baseline.msi
           path: ${{ runner.temp }}\mozkey-baseline-arm64-msi
 
       - name: Run native ARM64 installer lifecycle audit
@@ -669,7 +669,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_arm64_installer_lifecycle_audit
+          name: JustType64_arm64_installer_lifecycle_audit
           path: ${{ runner.temp }}\mozkey-w6-arm64-lifecycle-evidence
           if-no-files-found: warn
 
@@ -689,7 +689,7 @@ jobs:
       - name: Download exact ARM64 MSI from this workflow run
         uses: actions/download-artifact@v6
         with:
-          name: Mozc64_arm64.msi
+          name: JustType64_arm64.msi
           path: ${{ runner.temp }}\mozkey-arm64-msi
 
       - name: Install and audit exact ARM64 MSI
@@ -738,17 +738,17 @@ jobs:
             Select-Object -Unique
 
           $installCandidates = @(
-            $programRoots | ForEach-Object { Join-Path $_ "Mozc" }
+            $programRoots | ForEach-Object { Join-Path $_ "JustType" }
           )
 
           Write-Host "Program roots:"
           $programRoots | ForEach-Object { Write-Host "  $_" }
-          Write-Host "Mozc install candidates:"
+          Write-Host "JustType install candidates:"
           $installCandidates | ForEach-Object { Write-Host "  $_" }
 
           foreach ($candidate in $installCandidates) {
             if (Test-Path $candidate) {
-              throw "Mozc install candidate already exists before audit: $candidate"
+              throw "JustType install candidate already exists before audit: $candidate"
             }
           }
 
@@ -757,13 +757,13 @@ jobs:
           $summary = Join-Path $evidence "summary.txt"
 
           $expectedFirewallRules = @(
-            [pscustomobject]@{Name="Mozc Offline - Block mozc_server outbound"; File="mozc_server.exe"}
-            [pscustomobject]@{Name="Mozc Offline - Block mozc_tool outbound"; File="mozc_tool.exe"}
-            [pscustomobject]@{Name="Mozc Offline - Block mozc_renderer outbound"; File="mozc_renderer.exe"}
-            [pscustomobject]@{Name="Mozc Offline - Block mozc_broker outbound"; File="mozc_broker.exe"}
-            [pscustomobject]@{Name="Mozc Offline - Block mozc_cache_service outbound"; File="mozc_cache_service.exe"}
-            [pscustomobject]@{Name="Mozc Offline - Block mozc_zenz_scorer outbound"; File="mozc_zenz_scorer.exe"}
-            [pscustomobject]@{Name="Mozc Offline - Block llama-server outbound"; File="llama-server.exe"}
+            [pscustomobject]@{Name="JustType Offline - Block mozc_server outbound"; File="JustType_server.exe"}
+            [pscustomobject]@{Name="JustType Offline - Block mozc_tool outbound"; File="JustType_tool.exe"}
+            [pscustomobject]@{Name="JustType Offline - Block mozc_renderer outbound"; File="JustType_renderer.exe"}
+            [pscustomobject]@{Name="JustType Offline - Block mozc_broker outbound"; File="JustType_broker.exe"}
+            [pscustomobject]@{Name="JustType Offline - Block mozc_cache_service outbound"; File="JustType_cache_service.exe"}
+            [pscustomobject]@{Name="JustType Offline - Block mozc_zenz_scorer outbound"; File="mozc_zenz_scorer.exe"}
+            [pscustomobject]@{Name="JustType Offline - Block llama-server outbound"; File="llama-server.exe"}
           )
 
           Write-Host ""
@@ -771,10 +771,10 @@ jobs:
           foreach ($spec in $expectedFirewallRules) {
             $existing = @(Get-NetFirewallRule -DisplayName $spec.Name -ErrorAction SilentlyContinue)
             if ($existing.Count -ne 0) {
-              throw "Unexpected pre-existing Mozc firewall rule: $($spec.Name)"
+              throw "Unexpected pre-existing JustType firewall rule: $($spec.Name)"
             }
           }
-          Write-Host "Pre-existing Mozc offline rules = NONE"
+          Write-Host "Pre-existing JustType offline rules = NONE"
 
           function Get-PEMachine {
             param([Parameter(Mandatory)][string]$Path)
@@ -1091,7 +1091,7 @@ jobs:
 
             $msiFolderLines = @(
               Select-String -Path $installLog `
-                -Pattern "ProgramFilesFolder|ProgramFiles64Folder|MozcDir" `
+                -Pattern "ProgramFilesFolder|ProgramFiles64Folder|JustTypeDir" `
                 -ErrorAction SilentlyContinue |
                 ForEach-Object { $_.Line }
             )
@@ -1100,9 +1100,9 @@ jobs:
                 -Encoding utf8
 
             if ($matchingDirs.Count -ne 1) {
-              Write-Host "Matching installed Mozc directories = $($matchingDirs.Count)"
+              Write-Host "Matching installed JustType directories = $($matchingDirs.Count)"
               $matchingDirs | ForEach-Object { Write-Host "  $_" }
-              throw "Could not resolve exactly one installed Mozc directory from MSI payload identity."
+              throw "Could not resolve exactly one installed JustType directory from MSI payload identity."
             }
 
             $installDir = $matchingDirs[0]
@@ -1663,7 +1663,7 @@ jobs:
                   Set-Content (Join-Path $evidence "firewall-rules-remaining.txt") `
                     -Encoding utf8
                 Write-Error (
-                  "Mozc firewall rules remain after uninstall: " +
+                  "JustType firewall rules remain after uninstall: " +
                   ($remainingFirewallRules -join ", ")
                 )
               }
@@ -1688,7 +1688,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_arm64_native_installed_msi_audit
+          name: JustType64_arm64_native_installed_msi_audit
           path: ${{ runner.temp }}\mozkey-w4-arm64-msi-evidence
           if-no-files-found: warn
   test_arm64_tip_client_architecture:
@@ -1874,7 +1874,7 @@ jobs:
       - name: Download exact ARM64 MSI from this workflow run
         uses: actions/download-artifact@v6
         with:
-          name: Mozc64_arm64.msi
+          name: JustType64_arm64.msi
           path: ${{ runner.temp }}\mozkey-tip-smoke-msi
 
       - name: Install MSI and audit TIP client architecture routing
@@ -1958,11 +1958,11 @@ jobs:
           Write-Host "64-bit COM server = $($reg64.Server)"
           Write-Host "32-bit COM server = $($reg32.Server)"
 
-          if ([System.IO.Path]::GetFileName($reg64.Server) -ine "mozc_tip64x.dll") {
-            throw "64-bit ARM64 COM registration does not point to mozc_tip64x.dll."
+          if ([System.IO.Path]::GetFileName($reg64.Server) -ine "JustType_tip64x.dll") {
+            throw "64-bit ARM64 COM registration does not point to JustType_tip64x.dll."
           }
-          if ([System.IO.Path]::GetFileName($reg32.Server) -ine "mozc_tip32.dll") {
-            throw "32-bit COM registration does not point to mozc_tip32.dll."
+          if ([System.IO.Path]::GetFileName($reg32.Server) -ine "JustType_tip32.dll") {
+            throw "32-bit COM registration does not point to JustType_tip32.dll."
           }
           if ($reg64.ThreadingModel -ine "Apartment") {
             throw "64-bit TIP ThreadingModel is not Apartment."
@@ -2047,7 +2047,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_arm64_tip_client_architecture_smoke
+          name: JustType64_arm64_tip_client_architecture_smoke
           path: ${{ runner.temp }}\mozkey-tip-client-architecture-evidence
           if-no-files-found: warn
           retention-days: 7
@@ -2254,7 +2254,7 @@ jobs:
       - name: Download exact ARM64 MSI
         uses: actions/download-artifact@v6
         with:
-          name: Mozc64_arm64.msi
+          name: JustType64_arm64.msi
           path: arm64-msi
 
       - name: Install exact ARM64 MSI
@@ -2364,7 +2364,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: Mozc64_arm64_tsf_application_host_foundation
+          name: JustType64_arm64_tsf_application_host_foundation
           path: |
             ${{ runner.temp }}/tsf-application-host-foundation.log
             ${{ runner.temp }}/tsf-host-install.log

@@ -263,19 +263,19 @@ class RendererLauncher : public RendererLauncherInterface {
       const int ret = listener.WaitEventOrProcess(kRendererWaitTimeout, pid);
       switch (ret) {
         case NamedEventListener::TIMEOUT:
-          LOG(ERROR) << "seems that mozc_renderer is not ready within "
+          LOG(ERROR) << "seems that JustType_renderer is not ready within "
                      << kRendererWaitTimeout << " msec";
           SetStatus(RendererStatus::RENDERER_TIMEOUT);
           ++error_times_;
           break;
         case NamedEventListener::EVENT_SIGNALED:
-          MOZC_VLOG(1) << "mozc_renderer is launched successfully within "
+          MOZC_VLOG(1) << "JustType_renderer is launched successfully within "
                        << kRendererWaitTimeout << " msec";
           FlushPendingCommand();
           error_times_ = 0;
           break;
         case NamedEventListener::PROCESS_SIGNALED:
-          LOG(ERROR) << "Mozc renderer is terminated";
+          LOG(ERROR) << "JustType renderer is terminated";
           SetStatus(RendererStatus::RENDERER_TERMINATED);
           ++error_times_;
           break;

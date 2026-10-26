@@ -46,7 +46,7 @@ mozc_win32_cc_prod_binary(
     name = "mozc_cache_service",
     srcs = ["mozc_cache_service.cc"],
     executable_name_map = {
-        "Mozc": "mozc_cache_service.exe",
+        "Mozc": "JustType_cache_service.exe",
         "GoogleJapaneseInput": "GoogleIMEJaCacheService.exe",
     },
     static_crt = False,

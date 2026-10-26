@@ -30,14 +30,14 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_INTERNAL_NAME "GoogleIMEJaCacheService"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_INTERNAL_NAME "mozc_cache_service"
+    #define MOZC_RES_INTERNAL_NAME "JustType_cache_service"
   #endif
 #endif
 #ifndef MOZC_RES_ORIGINAL_FILENAME
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_ORIGINAL_FILENAME "GoogleIMEJaCacheService.exe"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_ORIGINAL_FILENAME "mozc_cache_service.exe"
+    #define MOZC_RES_ORIGINAL_FILENAME "JustType_cache_service.exe"
   #endif
 #endif
 #ifndef MOZC_RES_FILE_DESCRIPTION
@@ -70,8 +70,8 @@ BEGIN
     IDS_DISPLAYNAME         "Google Japanese Input Cache Service"
     IDS_DESCRIPTION         "Google 日本語入力 の辞書を常に物理メモリに配置し、変換を高速化します。停止しても日本語入力はできますが、パフォーマンスが低下する場合があります。"
 #elif defined(MOZC_BUILD)
-    IDS_DISPLAYNAME         "Mozc Cache Service"
-    IDS_DESCRIPTION         "Mozc の辞書を常に物理メモリに配置し、変換を高速化します。停止しても日本語入力はできますが、パフォーマンスが低下する場合があります。"
+    IDS_DISPLAYNAME         "JustType Cache Service"
+    IDS_DESCRIPTION         "JustType の辞書を常に物理メモリに配置し、変換を高速化します。停止しても日本語入力はできますが、パフォーマンスが低下する場合があります。"
 #endif
 END
 
@@ -81,8 +81,8 @@ BEGIN
     IDS_DISPLAYNAME         "Google Japanese Input Cache Service"
     IDS_DESCRIPTION         "Always allocates conversion dictionary of Google Japanese input into physical memory."
 #elif defined(MOZC_BUILD)
-    IDS_DISPLAYNAME         "Mozc Cache Service"
-    IDS_DESCRIPTION         "Always allocates conversion dictionary of Mozc into physical memory."
+    IDS_DISPLAYNAME         "JustType Cache Service"
+    IDS_DESCRIPTION         "Always allocates conversion dictionary of JustType into physical memory."
 #endif
 END
 

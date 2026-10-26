@@ -23,13 +23,13 @@ $LegacyDllHashes = [ordered]@{
 }
 
 $ExpectedFirewallRules = @(
-  "Mozc Offline - Block mozc_server outbound"
-  "Mozc Offline - Block mozc_tool outbound"
-  "Mozc Offline - Block mozc_renderer outbound"
-  "Mozc Offline - Block mozc_broker outbound"
-  "Mozc Offline - Block mozc_cache_service outbound"
-  "Mozc Offline - Block mozc_zenz_scorer outbound"
-  "Mozc Offline - Block llama-server outbound"
+  "JustType Offline - Block mozc_server outbound"
+  "JustType Offline - Block mozc_tool outbound"
+  "JustType Offline - Block mozc_renderer outbound"
+  "JustType Offline - Block mozc_broker outbound"
+  "JustType Offline - Block mozc_cache_service outbound"
+  "JustType Offline - Block mozc_zenz_scorer outbound"
+  "JustType Offline - Block llama-server outbound"
 )
 
 New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
@@ -163,7 +163,7 @@ function Invoke-Msi {
   return $p.ExitCode
 }
 
-function Resolve-MozcInstallDir {
+function Resolve-JustTypeInstallDir {
   $roots = @(
     [Environment]::GetEnvironmentVariable("ProgramFiles")
     [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
@@ -175,7 +175,7 @@ function Resolve-MozcInstallDir {
 
   $matches = @()
   foreach ($root in $roots) {
-    $candidate = Join-Path $root "Mozc"
+    $candidate = Join-Path $root "JustType"
     if ((Test-Path (Join-Path $candidate "mozc_zenz_scorer.exe") -PathType Leaf) -and
         (Test-Path (Join-Path $candidate "llama-server.exe") -PathType Leaf) -and
         (Test-Path (Join-Path $candidate "models\zenz-v3.2-small-Q5_K_M.gguf") -PathType Leaf)) {
@@ -184,7 +184,7 @@ function Resolve-MozcInstallDir {
   }
 
   if ($matches.Count -ne 1) {
-    throw "Expected exactly one installed Mozc directory; found $($matches.Count)"
+    throw "Expected exactly one installed JustType directory; found $($matches.Count)"
   }
   return $matches[0]
 }
@@ -560,7 +560,7 @@ try {
     throw "Current ProductCode unexpectedly registered during baseline install."
   }
 
-  $installDir = Resolve-MozcInstallDir
+  $installDir = Resolve-JustTypeInstallDir
   Write-Host "Baseline install directory = $installDir"
 
   $baselineLlama = Join-Path $installDir "llama-server.exe"
@@ -595,13 +595,13 @@ try {
     throw "Current ProductCode is not registered after upgrade."
   }
 
-  $installDir = Resolve-MozcInstallDir
+  $installDir = Resolve-JustTypeInstallDir
   Assert-CurrentPayload $installDir
   Assert-FirewallRuleCount -Expected 7
 
-  $service = Get-Service -Name "MozcCacheService" -ErrorAction SilentlyContinue
+  $service = Get-Service -Name "JustTypeCacheService" -ErrorAction SilentlyContinue
   if (-not $service) {
-    throw "MozcCacheService missing after upgrade."
+    throw "JustTypeCacheService missing after upgrade."
   }
 
   Invoke-ScorerContextGate $installDir
@@ -650,9 +650,9 @@ try {
     }
   }
 
-  $serviceAfter = Get-Service -Name "MozcCacheService" -ErrorAction SilentlyContinue
+  $serviceAfter = Get-Service -Name "JustTypeCacheService" -ErrorAction SilentlyContinue
   if ($serviceAfter -and $uninstallExit -ne 3010) {
-    throw "MozcCacheService remains after non-reboot uninstall."
+    throw "JustTypeCacheService remains after non-reboot uninstall."
   }
 
   $summary = @(

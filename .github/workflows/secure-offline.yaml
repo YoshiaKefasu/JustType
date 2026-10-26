@@ -215,7 +215,7 @@ jobs:
           Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $extractDir | Out-Null
 
-          $msi = Resolve-Path "src\bazel-bin\win32\installer\Mozc64.msi"
+          $msi = Resolve-Path "src\bazel-bin\win32\installer\JustType64.msi"
 
           & msiexec.exe /a "$msi" /qn TARGETDIR="$extractDir"
           if ($LASTEXITCODE -ne 0) {
@@ -238,6 +238,6 @@ jobs:
       - name: Upload MSI
         uses: actions/upload-artifact@v7
         with:
-          name: Mozc64.msi
-          path: src/bazel-bin/win32/installer/Mozc64.msi
+          name: JustType64.msi
+          path: src/bazel-bin/win32/installer/JustType64.msi
           if-no-files-found: warn

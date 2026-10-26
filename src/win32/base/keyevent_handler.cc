@@ -797,9 +797,9 @@ KeyEventHandlerResult KeyEventHandler::HandleKey(
       return result;
     }
 
-    // For historical reasons, pass the visible conversion mode to the
-    // converter.
-    const DWORD repotring_mode = ime_state.visible_conversion_mode;
+    // Report the logical mode for the same reason as below: the visible mode
+    // can be a transient Shift+letter artifact.
+    const DWORD repotring_mode = ime_state.logical_conversion_mode;
     commands::CompositionMode mozc_mode = commands::DIRECT;
     if (!ConversionModeUtil::GetMozcModeFromNativeMode(repotring_mode,
                                                        &mozc_mode)) {
@@ -818,8 +818,12 @@ KeyEventHandlerResult KeyEventHandler::HandleKey(
 
   DCHECK(ime_state.open);
 
-  // For historical reasons, pass the visible conversion mode to the converter.
-  const DWORD repotring_mode = ime_state.visible_conversion_mode;
+  // Report the mode visible from the IME framework (the user's logical mode),
+  // not the transient one the composition may be in. Mozc temporarily enters
+  // HALF_ASCII for a Shift+letter, and echoing that back to the server made it
+  // treat the next key as a manual alphanumeric selection, overwriting the
+  // comeback mode so the IME stayed in _A permanently.
+  const DWORD repotring_mode = ime_state.logical_conversion_mode;
 
   commands::CompositionMode mozc_mode = commands::HIRAGANA;
   if (!ConversionModeUtil::GetMozcModeFromNativeMode(repotring_mode,

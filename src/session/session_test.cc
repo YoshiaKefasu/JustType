@@ -9022,9 +9022,12 @@ TEST_F(SessionTest, StatusOutput) {
     // deactivated.  This is the reason why command.output().mode() is
     // going to be obsolete.
     EXPECT_EQ(command.output().mode(), commands::DIRECT);
-    EXPECT_EQ(command.output().status().mode(), commands::FULL_KATAKANA);
-    EXPECT_EQ(command.output().status().comeback_mode(),
-              commands::FULL_KATAKANA);
+    // The katakana was only the base the Shift+letter run was layered on.  A
+    // commit ends that run and aligns both slots on Hiragana, so the pinned
+    // katakana does not come back: Composer::Reset() restores
+    // |comeback_input_mode_|, and the TSF client echoes it back on the next key.
+    EXPECT_EQ(command.output().status().mode(), commands::HIRAGANA);
+    EXPECT_EQ(command.output().status().comeback_mode(), commands::HIRAGANA);
   }
 }
 
@@ -10782,6 +10785,175 @@ TEST_F(SessionTest, Issue2187132) {
   SendKey("Enter", &session, &command);
   SendKey("a", &session, &command);
   EXPECT_EQ(GetComposition(command), "a");
+}
+
+TEST_F(SessionTest, TemporaryRunEndsInHiraganaAfterCommit) {
+  // A temporary run layered on a pinned mode must end in Hiragana, not fall
+  // back to the pinned mode.  This is the residue that made a katakana
+  // selection stick: Composer::Reset() restores |comeback_input_mode_|, so a
+  // composition that pinned katakana came back to katakana and the user kept
+  // typing "アイウ" long after the conversion they asked for.
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+  commands::Command command;
+
+  // Pin katakana (this is what the Katakana key used to do, and what an
+  // application can still ask for).
+  ASSERT_TRUE(session.CompositionModeFullKatakana(&command));
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::FULL_KATAKANA);
+
+  // A Shift+letter layers the temporary ASCII mode on top of it.
+  ASSERT_TRUE(SendKey("A", &session, &command));
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HALF_ASCII);
+
+  // Commit.  The next character must be hiragana, not katakana.
+  command.Clear();
+  ASSERT_TRUE(SendKey("Enter", &session, &command));
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HIRAGANA);
+
+  command.Clear();
+  ASSERT_TRUE(SendKey("a", &session, &command));
+  EXPECT_EQ(GetComposition(command), "あ");
+}
+
+TEST_F(SessionTest, TemporaryRunComebackModeBecomesHiraganaAfterCommit) {
+  // A temporary run must not leave the old base behind in
+  // |comeback_input_mode_|. Composer::Reset() restores that slot, and the TSF
+  // client echoes whatever it believes the mode is on the next key event. If
+  // the slot still held katakana, that echo would put the user back into
+  // katakana right after committing, which is the reported "keeps typing
+  // アイウ" residue.
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+  commands::Command command;
+
+  ASSERT_TRUE(session.CompositionModeFullKatakana(&command));
+  ASSERT_TRUE(SendKey("A", &session, &command));
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HALF_ASCII);
+  EXPECT_EQ(session.context().composer().GetComebackInputMode(),
+            transliteration::FULL_KATAKANA);
+
+  command.Clear();
+  ASSERT_TRUE(SendKey("Enter", &session, &command));
+
+  // Both slots must be Hiragana after the commit: the input mode the user keeps
+  // typing in, and the mode the TSF layer reports and echoes back.
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HIRAGANA);
+  EXPECT_EQ(session.context().composer().GetComebackInputMode(),
+            transliteration::HIRAGANA);
+
+  // An echoed mode from the TSF layer must not bring katakana back.
+  command.Clear();
+  ASSERT_TRUE(SendKeyWithMode("a", commands::HIRAGANA, &session, &command));
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HIRAGANA);
+  EXPECT_EQ(GetComposition(command), "あ");
+}
+
+TEST_F(SessionTest, ShiftLetterEchoedModeDoesNotLockAlphanumeric) {
+  // Regression for the _A lock: the TSF client echoes the mode it believes is
+  // active on every key event (KeyEvent::mode). While Composer sits in its own
+  // temporary Shift+letter ASCII mode, that echoed mode used to run
+  // SetInputMode(), which overwrote comeback_input_mode_ with HALF_ASCII and
+  // left the IME with no way back to Japanese.
+  //
+  // SendKeyWithMode() is exactly that echo, so this test drives the path the
+  // bug lived in. The temporary run must survive the echo and keep producing
+  // ASCII for the rest of the word.
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+  commands::Command command;
+
+  // Shift+T starts the temporary ASCII run.
+  ASSERT_TRUE(SendKey("T", &session, &command));
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HALF_ASCII);
+  // The user's real mode is untouched by the temporary mode.
+  EXPECT_EQ(session.context().composer().GetComebackInputMode(),
+            transliteration::HIRAGANA);
+
+  // The client now echoes HALF_ASCII (its visible mode) on the next key.
+  // Before the fix this replaced comeback_input_mode_ and locked _A forever.
+  command.Clear();
+  ASSERT_TRUE(SendKeyWithMode("o", commands::HALF_ASCII, &session, &command));
+
+  // The comeback mode must still be HIRAGANA after the echo.
+  EXPECT_EQ(session.context().composer().GetComebackInputMode(),
+            transliteration::HIRAGANA);
+
+  // Typing the rest of the word keeps producing ASCII.
+  command.Clear();
+  ASSERT_TRUE(SendKeyWithMode("d", commands::HALF_ASCII, &session, &command));
+  command.Clear();
+  ASSERT_TRUE(SendKeyWithMode("o", commands::HALF_ASCII, &session, &command));
+  EXPECT_EQ(GetComposition(command), "Todo");
+}
+
+TEST_F(SessionTest, TemporaryRunEndsInHiraganaAfterCancel) {
+  // Cancelling is the other way out of a composition and must behave the same.
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+  commands::Command command;
+
+  ASSERT_TRUE(session.CompositionModeFullKatakana(&command));
+  ASSERT_TRUE(SendKey("A", &session, &command));
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HALF_ASCII);
+
+  command.Clear();
+  ASSERT_TRUE(SendKey("Escape", &session, &command));
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HIRAGANA);
+
+  command.Clear();
+  ASSERT_TRUE(SendKey("a", &session, &command));
+  EXPECT_EQ(GetComposition(command), "あ");
+}
+
+TEST_F(SessionTest, ExplicitInputModeSurvivesCommit) {
+  // Plan B guard: a mode the user selected on purpose is not a leftover and
+  // must survive the commit.  This is what keeps the Eisu toggle, an InputScope
+  // from the application, and a password field usable.
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+  commands::Command command;
+
+  ASSERT_TRUE(session.CompositionModeHalfASCII(&command));
+  EXPECT_EQ(command.output().status().mode(), commands::HALF_ASCII);
+  EXPECT_EQ(command.output().status().comeback_mode(), commands::HALF_ASCII);
+
+  ASSERT_TRUE(SendKey("a", &session, &command));
+  EXPECT_EQ(GetComposition(command), "a");
+
+  command.Clear();
+  ASSERT_TRUE(SendKey("Enter", &session, &command));
+
+  // Still half-width ASCII: the user asked for it explicitly.
+  EXPECT_EQ(session.context().composer().GetInputMode(),
+            transliteration::HALF_ASCII);
+  command.Clear();
+  ASSERT_TRUE(SendKey("b", &session, &command));
+  EXPECT_EQ(GetComposition(command), "b");
 }
 
 TEST_F(SessionTest, Issue2190364) {

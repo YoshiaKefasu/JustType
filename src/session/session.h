@@ -890,6 +890,22 @@ class Session {
   // composition to convert, so live conversion must keep running for it.
   bool IsTemporaryShiftAsciiInputMode() const;
 
+  // Puts the Composer back into the user's real input mode when |key_event| is
+  // the first Japanese letter after a finished English word, so the letter is
+  // transliterated instead of being inserted as raw ASCII.
+  //
+  // Why this is needed: Composer::ApplyTemporaryInputMode() enters ASCII for a
+  // shifted letter and only leaves it once it has seen a second shifted letter
+  // followed by an unshifted one ("AAa").  A word typed with a single initial
+  // capital ("Github", "Cli") therefore never leaves ASCII, and the を of
+  // "を使って" that follows is inserted as raw ASCII rather than transliterated.
+  // Mozc cannot tell those apart on its own, but Meltype knows where the
+  // English piece ends — that boundary is what decides here.
+  //
+  // Does nothing when the mode is not a temporary Shift+letter ASCII mode: a
+  // user-chosen alphanumeric mode (Eisu) has no composition to protect.
+  void EndTemporaryShiftAsciiRunIfWordEnded(const commands::KeyEvent& key_event);
+
   // Handles KeyEvent::activated to support indirect IME on/off.
   bool HandleIndirectImeOnOff(mozc::commands::Command* command);
 

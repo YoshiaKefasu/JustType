@@ -706,11 +706,12 @@ bool IsPendingDirectCommitLearningDiscardKey(
   }
 }
 
-// The single ASCII character a Shift+letter key types, or empty when
-// |key_event| is anything else.  Mozc receives Shift+letter with the SHIFT
-// modifier already folded into the key code, so the uppercase code itself is
-// the character; CapsLock flips which case means "shifted".
-std::string ShiftedAsciiInputChar(const commands::KeyEvent& key_event) {
+// The single ASCII character |key_event| types, or empty when it is anything
+// else (a special key, a non-ASCII character, a shortcut, or a multi-character
+// key string).  Mozc receives Shift+letter with the SHIFT modifier already
+// folded into the key code, so the uppercase code itself is the character;
+// CapsLock flips which case means "shifted".
+std::string AsciiInputChar(const commands::KeyEvent& key_event) {
   if (key_event.input_style() != commands::KeyEvent::FOLLOW_MODE ||
       key_event.has_special_key()) {
     return std::string();
@@ -731,7 +732,16 @@ std::string ShiftedAsciiInputChar(const commands::KeyEvent& key_event) {
   if (KeyEventUtil::HasCtrl(modifiers) || KeyEventUtil::HasAlt(modifiers)) {
     return std::string();
   }
+  return input;
+}
 
+// The single ASCII character a Shift+letter key types, or empty when
+// |key_event| is anything else.  See AsciiInputChar() for the key-code rules.
+std::string ShiftedAsciiInputChar(const commands::KeyEvent& key_event) {
+  const std::string input = AsciiInputChar(key_event);
+  if (input.empty()) return std::string();
+
+  const uint32_t modifiers = KeyEventUtil::GetModifiers(key_event);
   const bool caps_locked = KeyEventUtil::HasCaps(modifiers);
   const char key = input[0];
   const bool shifted = (!caps_locked && ('A' <= key && key <= 'Z')) ||
@@ -883,9 +893,54 @@ void SetSessionState(const ImeContext::State state, ImeContext* context) {
   context->set_state(state);
   switch (state) {
     case ImeContext::DIRECT:
-    case ImeContext::PRECOMPOSITION:
+      // The IME is off; keep the mode the user chose so that turning the IME
+      // back on resumes it.  Nothing is being typed in this state, so there is
+      // no temporary mode to drop.
       context->mutable_composer()->Reset();
       break;
+    case ImeContext::PRECOMPOSITION: {
+      // Every commit (Enter, a direct commit, a committed suggestion) and every
+      // cancel passes through here, so this is the one place that can make a
+      // one-shot katakana / alphanumeric run end in Hiragana.
+      //
+      // A "temporary" mode is the one Composer layers on top of the mode the
+      // user really chose: Shift+letter ASCII, the kana-type rotation, and the
+      // KATAKANA_INPUT_MODE shift.  Composer keeps the chosen mode in
+      // |comeback_input_mode_| and the layered one in |input_mode_|, so the two
+      // differing is exactly the signal that the composition just ended was
+      // typed in a temporary mode.  A mode the user or the application selected
+      // explicitly (Eisu, SWITCH_COMPOSITION_MODE from an InputScope) has both
+      // slots equal and must survive the commit unchanged.
+      //
+      // Reset() alone is not enough: it restores |comeback_input_mode_|, so a
+      // temporary run would keep coming back to whatever base it was layered on
+      // instead of returning to Hiragana.
+      composer::Composer* composer = context->mutable_composer();
+      const bool had_temporary_input_mode =
+          composer->GetInputMode() != composer->GetComebackInputMode();
+      // A password field is where raw ASCII has to keep working across commits,
+      // so it is never moved out from under the user.
+      const bool is_password_field =
+          composer->GetInputFieldType() == commands::Context::PASSWORD;
+
+      composer->Reset();
+
+      if (had_temporary_input_mode && !is_password_field) {
+        // SetInputMode() writes both slots.  SetTemporaryInputMode() here would
+        // leave the previous base in |comeback_input_mode_|, and Composer::Reset()
+        // restores that slot, so the very next key would come back to it.  The
+        // TSF client also echoes whatever mode it believes is active, which made
+        // the stale base stick across commits ("keeps typing アイウ" after a
+        // katakana run, or _A after a Shift+letter run).  Aligning both slots on
+        // Hiragana is what actually ends the temporary run.
+        //
+        // A mode the user or the application pinned explicitly never reaches
+        // this branch: those have |input_mode_| == |comeback_input_mode_|, so
+        // |had_temporary_input_mode| is false and the pinned mode survives.
+        composer->SetInputMode(transliteration::HIRAGANA);
+      }
+      break;
+    }
     case ImeContext::CONVERSION:
       context->mutable_composer()->ResetInputMode();
       break;
@@ -4589,6 +4644,17 @@ bool Session::InsertCharacter(commands::Command* command) {
 
   command->mutable_output()->set_consumed(true);
 
+  // A lowercase letter that Meltype places after the finished English word is
+  // Japanese input, not more of the word.  The Composer is still in Mozc's
+  // temporary Shift+letter ASCII mode (it only leaves it after "AAa"), so put
+  // it back first; otherwise the letter would be inserted as raw ASCII and
+  // "anoGithub Cli" + "wotsukatte" would stay romaji instead of becoming
+  // "あの Github Cli を使って".
+  //
+  // Done here, before the branches below, so every one of them sees the mode
+  // the letter will actually be inserted in.
+  EndTemporaryShiftAsciiRunIfWordEnded(key);
+
   // If a direct-commit punctuation/symbol is typed while delayed live conversion
   // is pending, commit the currently visible pending preedit. Do not materialize
   // the pending conversion here, because that would commit a conversion result
@@ -7726,6 +7792,44 @@ bool Session::IsTemporaryShiftAsciiInputMode() const {
       context_->composer().GetComebackInputMode();
   return comeback_mode != transliteration::HALF_ASCII &&
          comeback_mode != transliteration::FULL_ASCII;
+}
+
+void Session::EndTemporaryShiftAsciiRunIfWordEnded(
+    const commands::KeyEvent& key_event) {
+  // The ASCII mode has to be Mozc's own temporary one.  A user-chosen
+  // alphanumeric mode (Eisu) is where the user wants raw ASCII, so nothing is
+  // reverted there.
+  if (!IsTemporaryShiftAsciiInputMode()) return;
+
+  // Only the classic ASCII-switch behaviour creates the temporary mode.
+  if (context_->GetConfig().shift_key_mode_switch() !=
+      config::Config::ASCII_INPUT_MODE) {
+    return;
+  }
+
+  // A Shift+letter always starts a new word, so only an unshifted letter can
+  // end the current one.  AsciiInputChar() returns the character the key
+  // types, and an uppercase one here means the key was shifted.
+  const std::string input = AsciiInputChar(key_event);
+  if (input.size() != 1) return;
+  const char letter = input[0];
+  if (letter < 'a' || letter > 'z') return;
+
+  // Meltype is the only judge: it reports the boundary where the English piece
+  // ends and the Japanese piece begins.  Without its dictionaries it has no
+  // opinion and the ASCII run continues exactly as before.
+  const std::string raw = context_->composer().GetRawString();
+  if (raw.empty()) return;
+  if (!MeltypeBridge::EndsTemporaryShiftAsciiRun(raw, letter)) return;
+
+  // Back to the user's real mode.  ResetInputMode() is Mozc's own "leave the
+  // temporary Shift+letter mode" operation — it restores comeback_input_mode_
+  // and resets the shifted-sequence counters, so the next Shift+letter starts a
+  // fresh English word.
+  context_->mutable_composer()->ResetInputMode();
+  TraceStep("Composer",
+            absl::StrCat("end temporary ASCII before \"", TraceText(input),
+                         "\" (Meltype: the English word ended)"));
 }
 
 bool Session::CompositionMixesJapaneseAndEnglish(absl::string_view extra) const {

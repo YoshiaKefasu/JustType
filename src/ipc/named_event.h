@@ -61,17 +61,17 @@
 // send signals to the listener blocked with Wait() method
 // notifier.Notify();
 //
-// After mozc UI launches mozc_server.exe,
-// mozc UI needs to wait until mozc_server is ready.
-// For this purpose, mozc UI makes a listener object.
-//  When mozc_server completes all initialization and
-// is ready for conversion, mozc_server sends a notification
+// After the IME UI launches JustType_server.exe,
+// the IME UI needs to wait until JustType_server is ready.
+// For this purpose, the IME UI makes a listener object.
+//  When JustType_server completes all initialization and
+// is ready for conversion, JustType_server sends a notification
 // event to the client.
 //
 // Example
 // - UI process
-// if (mozc_server is not running) {
-//   CreateProcess("mozc_server.exe" ...);
+// if (JustType_server is not running) {
+//   CreateProcess("JustType_server.exe" ...);
 //   mozc::NamedEventListener l("session");
 //   Display Splash Window
 //   l.Wait(absl::Seconds(10));

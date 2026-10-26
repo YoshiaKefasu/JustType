@@ -29,14 +29,14 @@ LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_INTERNAL_NAME "GoogleIMEJaConverter"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_INTERNAL_NAME "mozc_server"
+    #define MOZC_RES_INTERNAL_NAME "JustType_server"
   #endif
 #endif
 #ifndef MOZC_RES_ORIGINAL_FILENAME
   #if defined(GOOGLE_JAPANESE_INPUT_BUILD)
     #define MOZC_RES_ORIGINAL_FILENAME "GoogleIMEJaConverter.exe"
   #elif defined(MOZC_BUILD)
-    #define MOZC_RES_ORIGINAL_FILENAME "mozc_server.exe"
+    #define MOZC_RES_ORIGINAL_FILENAME "JustType_server.exe"
   #endif
 #endif
 #ifndef MOZC_RES_FILE_DESCRIPTION

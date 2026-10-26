@@ -158,7 +158,7 @@ def run_wix4(args) -> None:
   # Gen Interface JP Display ships inside the MSI so the candidate window and the
   # config dialog resolve the family on a machine that never installed it.  The
   # renderer and the dialog both register these faces per process from
-  # <MozcDir>\fonts, which is the directory the .wxs below installs them into.
+  # <JustTypeDir>\fonts, which is the directory the .wxs below installs them into.
   gen_interface_jp_display_regular = pathlib.Path(
       args.gen_interface_jp_display_regular).resolve()
   gen_interface_jp_display_bold = pathlib.Path(
@@ -189,7 +189,7 @@ def run_wix4(args) -> None:
       'build',
       '-nologo',
       '-arch', arch,
-      '-define', f'MozcVersion={version.GetVersionString()}',
+      '-define', f'JustTypeVersion={version.GetVersionString()}',
       '-define', f'UpgradeCode={upgrade_code}',
       '-define', f'OmahaGuid={omaha_guid}',
       '-define', f'OmahaClientKey={omaha_client_key}',
@@ -198,13 +198,13 @@ def run_wix4(args) -> None:
       '-define', f'VSConfigurationName={vs_configuration_name}',
       '-define', f'ReleaseRedistCrt64Dir={redist_64bit}',
       '-define', f'AddRemoveProgramIconPath={icon_path}',
-      '-define', f'MozcTIP32Path={mozc_tip32}',
-      '-define', f'MozcTIP64Path={mozc_tip64}',
-      '-define', f'MozcBroker64Path={mozc_broker}',
-      '-define', f'MozcServer64Path={mozc_server}',
-      '-define', f'MozcCacheService64Path={mozc_cache_service}',
-      '-define', f'MozcRenderer64Path={mozc_renderer}',
-      '-define', f'MozcToolPath={mozc_tool}',
+      '-define', f'JustTypeTIP32Path={mozc_tip32}',
+      '-define', f'JustTypeTIP64Path={mozc_tip64}',
+      '-define', f'JustTypeBroker64Path={mozc_broker}',
+      '-define', f'JustTypeServer64Path={mozc_server}',
+      '-define', f'JustTypeCacheService64Path={mozc_cache_service}',
+      '-define', f'JustTypeRenderer64Path={mozc_renderer}',
+      '-define', f'JustTypeToolPath={mozc_tool}',
       '-define', f'CustomActions64Path={custom_action}',
       '-define', f'MeltypeEnglishPath={meltype_english}',
       '-define', f'MeltypeEnglishWordsPath={meltype_english_words}',
@@ -225,11 +225,11 @@ def run_wix4(args) -> None:
     mozc_tip64arm = pathlib.Path(args.mozc_tip64arm).resolve()
     mozc_tip64x = pathlib.Path(args.mozc_tip64x).resolve()
     commands += [
-        '-define', f'MozcTIP64ArmPath={mozc_tip64arm}',
-        '-define', f'MozcTIP64XPath={mozc_tip64x}',
+        '-define', f'JustTypeTIP64ArmPath={mozc_tip64arm}',
+        '-define', f'JustTypeTIP64XPath={mozc_tip64x}',
     ]
     if args.enable_win_universal_installer:
-      commands += ['-define', 'MozcUniversalInstaller=Yes']
+      commands += ['-define', 'JustTypeUniversalInstaller=Yes']
   exec_command(commands, cwd=os.getcwd())
 
 

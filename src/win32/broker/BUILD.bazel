@@ -43,7 +43,7 @@ mozc_win32_cc_prod_binary(
     name = "mozc_broker_main",
     srcs = ["mozc_broker_main.cc"],
     executable_name_map = {
-        "Mozc": "mozc_broker.exe",
+        "Mozc": "JustType_broker.exe",
         "GoogleJapaneseInput": "GoogleIMEJaBroker.exe",
     },
     static_crt = False,

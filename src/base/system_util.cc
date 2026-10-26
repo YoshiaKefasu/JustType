@@ -306,7 +306,7 @@ std::string UserProfileDirectoryImpl::GetUserProfileDirectory() const {
     // On iOS, use Caches directory instead of Application Support directory
     // because the support directory doesn't exist by default.  Also, it is
     // backed up by iTunes and iCloud.
-    return FileUtil::JoinPath({MacUtil::GetCachesDirectory(), kProductPrefix});
+    return FileUtil::JoinPath({MacUtil::GetCachesDirectory(), kMacBundlePrefix});
 
 #elif defined(_WIN32)
     DCHECK(SUCCEEDED(LocalAppDataDirectoryCache::GetInstance()->result()));
@@ -425,10 +425,15 @@ void SystemUtil::SetUserProfileDirectory(const std::string& path) {
 #ifdef _WIN32
 namespace {
 // TODO(yukawa): Use API wrapper so that unit test can emulate any case.
-class ProgramFilesX86Cache {
+//
+// |kCsidl| is either CSIDL_PROGRAM_FILESX86 or CSIDL_PROGRAM_FILES. Both are
+// needed: historical Mozc builds installed under %ProgramFiles(x86)%, while the
+// current package installs under the native %ProgramFiles%.
+template <int kCsidl>
+class ProgramFilesCache {
  public:
-  static ProgramFilesX86Cache *GetInstance() {
-    static absl::NoDestructor<ProgramFilesX86Cache> impl;
+  static ProgramFilesCache *GetInstance() {
+    static absl::NoDestructor<ProgramFilesCache> impl;
     return impl.get();
   }
   const bool succeeded() const { return SUCCEEDED(result_); }
@@ -436,15 +441,15 @@ class ProgramFilesX86Cache {
   const std::string& path() const { return path_; }
 
  private:
-  friend class absl::NoDestructor<ProgramFilesX86Cache>;
+  friend class absl::NoDestructor<ProgramFilesCache>;
 
-  ProgramFilesX86Cache() : result_(E_FAIL) {
+  ProgramFilesCache() : result_(E_FAIL) {
     result_ = SafeTryProgramFilesPath(&path_);
   }
 
   // b/5707813 implies that the Shell API causes an exception in some cases.
   // In order to avoid potential infinite loops in call_once. the constructor
-  // of ProgramFilesX86Cache must be exception free.
+  // of ProgramFilesCache must be exception free.
   // Note that __try and __except does not guarantees that any destruction
   // of internal C++ objects when a non-C++ exception occurs except that
   // /EHa compiler option is specified.
@@ -467,12 +472,9 @@ class ProgramFilesX86Cache {
     path->clear();
 
     wchar_t program_files_path_buffer[MAX_PATH] = {};
-    // For historical reasons Mozc executables have been installed under
-    // %ProgramFiles(x86)%.
-    // TODO(https://github.com/google/mozc/issues/1086): Stop using "(x86)".
     const HRESULT result =
-        ::SHGetFolderPathW(nullptr, CSIDL_PROGRAM_FILESX86, nullptr,
-                           SHGFP_TYPE_CURRENT, program_files_path_buffer);
+        ::SHGetFolderPathW(nullptr, kCsidl, nullptr, SHGFP_TYPE_CURRENT,
+                           program_files_path_buffer);
     if (FAILED(result)) {
       return result;
     }
@@ -489,6 +491,11 @@ class ProgramFilesX86Cache {
   std::string path_;
 };
 
+// For historical reasons Mozc executables have been installed under
+// %ProgramFiles(x86)%. The current package installs under %ProgramFiles%.
+using ProgramFilesX86Cache = ProgramFilesCache<CSIDL_PROGRAM_FILESX86>;
+using ProgramFiles64Cache = ProgramFilesCache<CSIDL_PROGRAM_FILES>;
+
 constexpr wchar_t kMozcTipClsid[] =
     L"SOFTWARE\\Classes\\CLSID\\"
 #ifdef GOOGLE_JAPANESE_INPUT_BUILD
@@ -499,8 +506,8 @@ constexpr wchar_t kMozcTipClsid[] =
     L"\\InprocServer32";
 
 std::string GetMozcInstallDirFromRegistry() {
-  // TSF requires the path of "mozc_tip64.dll" to be registered in the registry,
-  // which tells us Mozc's installation directory.
+  // TSF requires the path of "JustType_tip64.dll" to be registered in the
+  // registry, which tells us JustType's installation directory.
   HKEY key = nullptr;
   LSTATUS result = ::RegOpenKeyExW(HKEY_LOCAL_MACHINE, kMozcTipClsid, 0,
                                    KEY_READ | KEY_WOW64_64KEY, &key);
@@ -517,10 +524,61 @@ std::string GetMozcInstallDirFromRegistry() {
   if (result != ERROR_SUCCESS || type != REG_SZ) {
     return "";
   }
-  return FileUtil::Dirname(win32::WideToUtf8(buffer));
+
+  // The registry may still point at a directory that no longer exists, e.g.
+  // after a failed upgrade or a manual deletion. Registering that stale path
+  // as the server directory makes every component lookup fail, so fall back to
+  // the default directory unless the 64-bit TIP DLL really is there.
+  const std::string install_dir = FileUtil::Dirname(win32::WideToUtf8(buffer));
+  if (install_dir.empty()) {
+    return "";
+  }
+  if (!FileUtil::FileExists(
+               FileUtil::JoinPath(install_dir, kMozcTIP64))
+           .ok()) {
+    return "";
+  }
+  return install_dir;
+}
+
+// Returns the product directory under |program_files|, honoring the
+// GOOGLE_JAPANESE_INPUT_BUILD layout.
+std::string GetProductDirectoryUnder(absl::string_view program_files) {
+  if (program_files.empty()) {
+    return "";
+  }
+#if defined(GOOGLE_JAPANESE_INPUT_BUILD)
+  return FileUtil::JoinPath(
+      FileUtil::JoinPath(program_files, kCompanyNameInEnglish),
+      kProductNameInEnglish);
+#else   // GOOGLE_JAPANESE_INPUT_BUILD
+  return FileUtil::JoinPath(program_files, kProductNameInEnglish);
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
 }
 
 }  // namespace
+#endif  // _WIN32
+
+#ifdef _WIN32
+std::string SystemUtil::GetProgramFiles64Directory() {
+  // SHGetFolderPathW(CSIDL_PROGRAM_FILES) cannot be used on its own here.
+  // Windows applies WOW64 redirection to it, so a 32-bit process receives
+  // %ProgramFiles(x86)% instead of the native 64-bit %ProgramFiles%. That is
+  // not hypothetical for this product: JustType_tip32.dll is loaded into
+  // 32-bit host applications, so the lookup really does run in a 32-bit
+  // process. Trusting the redirected value would make the native 64-bit
+  // installation directory (C:\Program Files\JustType) undiscoverable and the
+  // 32-bit host would keep resolving components under the legacy (x86) layout.
+  //
+  // %ProgramW6432% is set by WOW64 on 64-bit Windows and always names the real
+  // 64-bit directory, from both a 32-bit and a 64-bit process. Only a genuine
+  // 32-bit Windows, which defines no such variable, falls back to the shell API.
+  const std::string from_env = Environ::GetEnv("ProgramW6432");
+  if (!from_env.empty()) {
+    return from_env;
+  }
+  return ProgramFiles64Cache::GetInstance()->path();
+}
 #endif  // _WIN32
 
 std::string SystemUtil::GetServerDirectory() {
@@ -529,20 +587,37 @@ std::string SystemUtil::GetServerDirectory() {
   }
 
 #ifdef _WIN32
-  const std::string install_dir_from_registry = GetMozcInstallDirFromRegistry();
-  if (!install_dir_from_registry.empty()) {
-    return install_dir_from_registry;
+  // The registry value is the primary source, but it can be missing during a
+  // fresh install and stale after a failed upgrade. Rather than guessing one
+  // Program Files variant, probe both for JustType_tip64.dll, which is what TSF
+  // actually loads. Only when neither holds it does this fall back to the
+  // historical (x86) layout that Mozc used before the move to the native
+  // 64-bit directory.
+  const std::string from_registry = GetMozcInstallDirFromRegistry();
+  if (!from_registry.empty()) {
+    return from_registry;
   }
+
+  const std::string from_program_files_64 =
+      GetProductDirectoryUnder(GetProgramFiles64Directory());
+  if (!from_program_files_64.empty() &&
+      FileUtil::FileExists(FileUtil::JoinPath(from_program_files_64,
+                                              kMozcTIP64))
+          .ok()) {
+    return from_program_files_64;
+  }
+
   DCHECK(SUCCEEDED(ProgramFilesX86Cache::GetInstance()->result()));
-#if defined(GOOGLE_JAPANESE_INPUT_BUILD)
-  return FileUtil::JoinPath(
-      FileUtil::JoinPath(ProgramFilesX86Cache::GetInstance()->path(),
-                         kCompanyNameInEnglish),
-      kProductNameInEnglish);
-#else   // GOOGLE_JAPANESE_INPUT_BUILD
-  return FileUtil::JoinPath(ProgramFilesX86Cache::GetInstance()->path(),
-                            kProductNameInEnglish);
-#endif  // GOOGLE_JAPANESE_INPUT_BUILD
+  const std::string from_program_files_x86 =
+      GetProductDirectoryUnder(ProgramFilesX86Cache::GetInstance()->path());
+  if (!from_program_files_x86.empty() &&
+      FileUtil::FileExists(FileUtil::JoinPath(from_program_files_x86,
+                                              kMozcTIP64))
+          .ok()) {
+    return from_program_files_x86;
+  }
+
+  return from_program_files_x86;
 
 #elif defined(__APPLE__)
   return MacUtil::GetServerDirectory();

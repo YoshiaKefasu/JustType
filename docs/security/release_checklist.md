@@ -75,7 +75,7 @@ $extractDir = "msi_extract"
 Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $extractDir | Out-Null
 
-msiexec.exe /a "src\bazel-bin\win32\installer\Mozc64.msi" /qn TARGETDIR="$PWD\$extractDir"
+msiexec.exe /a "src\bazel-bin\win32\installer\JustType64.msi" /qn TARGETDIR="$PWD\$extractDir"
 ```
 
 - [ ] MSI-extracted Mozc core runtime binaries do not import prohibited networking DLLs
@@ -94,7 +94,7 @@ python tools\check_no_network_strings.py --root msi_extract
 ## Installed binary checks
 
 Use the actual install directory. On many Windows systems, Mozc is installed
-under `C:\Program Files (x86)\Mozc`.
+under `C:\Program Files (x86)\JustType`.
 
 - [ ] Installed Mozc core runtime binaries do not import prohibited networking DLLs
 
@@ -102,12 +102,12 @@ under `C:\Program Files (x86)\Mozc`.
 cd C:\Users\Makoto\dev\mozc
 
 python tools\check_no_network_imports.py `
-  "C:\Program Files (x86)\Mozc\mozc_server.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_tool.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_renderer.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_broker.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_cache_service.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_tip64.dll"
+  "C:\Program Files (x86)\JustType\JustType_server.exe" `
+  "C:\Program Files (x86)\JustType\JustType_tool.exe" `
+  "C:\Program Files (x86)\JustType\JustType_renderer.exe" `
+  "C:\Program Files (x86)\JustType\JustType_broker.exe" `
+  "C:\Program Files (x86)\JustType\JustType_cache_service.exe" `
+  "C:\Program Files (x86)\JustType\JustType_tip64.dll"
 ```
 
 - [ ] Installed Mozc core runtime binaries do not contain hard-deny telemetry / updater / crash-upload / usage-statistics markers
@@ -117,12 +117,12 @@ python tools\check_no_network_imports.py `
 cd C:\Users\Makoto\dev\mozc
 
 python tools\check_no_network_strings.py `
-  "C:\Program Files (x86)\Mozc\mozc_server.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_tool.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_renderer.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_broker.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_cache_service.exe" `
-  "C:\Program Files (x86)\Mozc\mozc_tip64.dll"
+  "C:\Program Files (x86)\JustType\JustType_server.exe" `
+  "C:\Program Files (x86)\JustType\JustType_tool.exe" `
+  "C:\Program Files (x86)\JustType\JustType_renderer.exe" `
+  "C:\Program Files (x86)\JustType\JustType_broker.exe" `
+  "C:\Program Files (x86)\JustType\JustType_cache_service.exe" `
+  "C:\Program Files (x86)\JustType\JustType_tip64.dll"
 ```
 
 ## Zenz localhost transport checks
@@ -229,13 +229,13 @@ Expected DebugView markers:
 - [ ] Outbound block rules exist for Mozc runtime executables
 
 ```powershell
-Get-NetFirewallRule -DisplayName "Mozc Offline - Block *"
+Get-NetFirewallRule -DisplayName "JustType Offline - Block *"
 ```
 
 - [ ] Firewall rules target Mozc executable paths
 
 ```powershell
-Get-NetFirewallRule -DisplayName "Mozc Offline - Block *" |
+Get-NetFirewallRule -DisplayName "JustType Offline - Block *" |
   Get-NetFirewallApplicationFilter |
   Select-Object Program
 ```
@@ -243,19 +243,19 @@ Get-NetFirewallRule -DisplayName "Mozc Offline - Block *" |
 Expected programs:
 
 ```text
-C:\Program Files (x86)\Mozc\mozc_server.exe
-C:\Program Files (x86)\Mozc\mozc_tool.exe
-C:\Program Files (x86)\Mozc\mozc_renderer.exe
-C:\Program Files (x86)\Mozc\mozc_broker.exe
-C:\Program Files (x86)\Mozc\mozc_cache_service.exe
-C:\Program Files (x86)\Mozc\mozc_zenz_scorer.exe
-C:\Program Files (x86)\Mozc\llama-server.exe
+C:\Program Files (x86)\JustType\JustType_server.exe
+C:\Program Files (x86)\JustType\JustType_tool.exe
+C:\Program Files (x86)\JustType\JustType_renderer.exe
+C:\Program Files (x86)\JustType\JustType_broker.exe
+C:\Program Files (x86)\JustType\JustType_cache_service.exe
+C:\Program Files (x86)\JustType\mozc_zenz_scorer.exe
+C:\Program Files (x86)\JustType\llama-server.exe
 ```
 
 - [ ] Firewall rules are outbound block rules
 
 ```powershell
-Get-NetFirewallRule -DisplayName "Mozc Offline - Block *" |
+Get-NetFirewallRule -DisplayName "JustType Offline - Block *" |
   Select-Object DisplayName, Direction, Action, Enabled, Profile
 ```
 
@@ -272,7 +272,7 @@ Profile: Any
 - [ ] Uninstall removes Mozc firewall rules
 
 ```powershell
-Get-NetFirewallRule -DisplayName "Mozc Offline - Block *" -ErrorAction SilentlyContinue
+Get-NetFirewallRule -DisplayName "JustType Offline - Block *" -ErrorAction SilentlyContinue
 ```
 
 Expected after uninstall: no rules are returned.

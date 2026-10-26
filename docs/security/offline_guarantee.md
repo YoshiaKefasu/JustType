@@ -122,11 +122,11 @@ runtime executables as an additional offline hardening layer.
 
 The rules target Mozc executable files such as:
 
-- mozc_server.exe
-- mozc_tool.exe
-- mozc_renderer.exe
-- mozc_broker.exe
-- mozc_cache_service.exe
+- JustType_server.exe
+- JustType_tool.exe
+- JustType_renderer.exe
+- JustType_broker.exe
+- JustType_cache_service.exe
 - mozc_zenz_scorer.exe
 - llama-server.exe
 

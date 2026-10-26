@@ -53,27 +53,41 @@
 //
 // What is NOT covered here, and where it is covered instead: the TSF client
 // side (win32/tip), the real composer's romaji state machine, the session-side
-// asynchronous worker plumbing, and the installed <MozcDir>\fonts path.  The
+// asynchronous worker plumbing, and the installed <JustTypeDir>\fonts path.  The
 // first three are compile-checked with the Session build; the last needs a
 // live desktop session, so it is verified by typing in the installed build
 // after the MSI is rebuilt.
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
+#include "composer/composer.h"
+#include "composer/table.h"
+#include "config/config_handler.h"
+#include "engine/engine_interface.h"
+#include "engine/mock_data_engine_factory.h"
 #include "meltype/scored_segmenter.h"
+#include "protocol/commands.pb.h"
+#include "protocol/config.pb.h"
 #include "renderer/win32/win32_font_resource.h"
+#include "session/meltype_bridge.h"
 #include "session/meltype_piece_pipeline.h"
+#include "session/session.h"
 #include "session/systemone_client.h"
 #include "session/systemone_logger.h"
+#include "transliteration/transliteration.h"
 
 // This test is Windows-only (see the target_compatible_with in
 // session/BUILD.bazel): it drives the real SystemOne WinHTTP client and the real
@@ -82,6 +96,21 @@
 
 namespace {
 
+using mozc::composer::Composer;
+using mozc::composer::Table;
+using mozc::commands::Command;
+using mozc::commands::KeyEvent;
+using mozc::commands::Request;
+using mozc::config::Config;
+using mozc::config::ConfigHandler;
+using mozc::transliteration::FULL_ASCII;
+using mozc::transliteration::FULL_KATAKANA;
+using mozc::transliteration::HALF_ASCII;
+using mozc::transliteration::HIRAGANA;
+using mozc::Engine;
+using mozc::MockDataEngineFactory;
+using mozc::session::MeltypeBridge;
+using mozc::session::Session;
 using mozc::session::OrderPieceCandidates;
 using mozc::session::OrderedPieceCandidates;
 using mozc::session::PieceCandidate;
@@ -767,6 +796,50 @@ int main() {
     }
     ReportEq("cchautteppoi の区間分け", "JA:っちゃうってっぽい", rendered);
   }
+  // [回帰検証] 促音の安全ルールを英語の保護より先に見る (原本 CompositionDetector
+  // の順序)。短い英単語の末尾子音が次の文字と重なって促音になるなら日本語の途中。
+  // 以前は保護が先に走り、辞書のマイナー語 teat が安全ルールをすり抜けて
+  // kaiteatta が kai + teat + ta に引き裂かれていた。
+  for (const auto& [romaji, expected] :
+       std::vector<std::pair<std::string, std::string>>{
+           {"kaiteatta", "JA:かいてあった"},
+           {"kaiteattayo", "JA:かいてあったよ"},
+           // 安全ルールは日本語を打っている途中の区間だけに効く。入力の先頭や
+           // 英文の途中で、綴りが偶然促音の形になっても英単語のまま。
+           {"goodday", "EN:goodday"},
+           {"meetthe", "EN:meetthe"},
+       }) {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput(romaji, ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq(romaji + " の区間分け (促音の安全ルールが先)", expected, rendered);
+  }
+  // [回帰検証] 大文字始まりの固有名詞 Todo の直後に助詞が続いても、全体を
+  // 英語にしない。propernouns.txt に無かったときは Todoniirete... が 1 つの
+  // 英単語に化けていた。
+  //
+  // Note: 「Todoni」だけを打ったときは、両方とも実在の英字の並びなので
+  // まだ 1 語として残る (既存の振る舞い)。分割が確定するのは日本語が続く場合。
+  for (const auto& [romaji, expected] :
+       std::vector<std::pair<std::string, std::string>>{
+           {"Todoniirete", "EN:Todo|JA:にいれて"},
+           {"Todowo", "EN:Todo|JA:を"},
+           {"sorewoTodoniireteoitekudasai",
+            "JA:それを|EN:Todo|JA:にいれておいてください"},
+       }) {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput(romaji, ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq(romaji + " の区間分け (Todo + 助詞)", expected, rendered);
+  }
 
   // [回帰検証] 大文字の頭字語 (WSL, CPU, GPU, API) + 日本語。大文字の塊の
   // 途中 (SL, PU, PI) で区切ると全体がローマ字のまま残っていた。
@@ -1372,12 +1445,12 @@ int main() {
 
     // パス解決: <server dir>\fonts。
     ReportEq("BundledFontsDirectory は <server dir>\\fonts",
-             std::wstring(L"C:\\Program Files (x86)\\Mozc\\fonts"),
+             std::wstring(L"C:\\Program Files (x86)\\JustType\\fonts"),
              mozc::renderer::win32::BundledFontsDirectory(
-                 L"C:\\Program Files (x86)\\Mozc"));
+                 L"C:\\Program Files (x86)\\JustType"));
     ReportEq("末尾の区切りは重ねない",
-             std::wstring(L"C:\\Mozc\\fonts"),
-             mozc::renderer::win32::BundledFontsDirectory(L"C:\\Mozc\\"));
+             std::wstring(L"C:\\JustType\\fonts"),
+             mozc::renderer::win32::BundledFontsDirectory(L"C:\\JustType\\"));
 
     const int registered =
         mozc::renderer::win32::RegisterBundledFonts(fonts.wstring());
@@ -1843,6 +1916,313 @@ int main() {
            "かんぱつ -> 間髪 が base dictionary にある", kanpatsu_detail);
   }
 
+  // -----------------------------------------------------------------------
+  // [8] 英単語の直後の日本語: 実 Session を実 Engine で回す
+  // -----------------------------------------------------------------------
+  // 再現する不具合: 大文字で始まる英単語 ("Github", "Cli") を打つと
+  // Composer は一時的な半角英数モードに入るが、Mozc の既存規則は
+  // 「シフトした文字が 2 つ以上続いたあとの小文字」(AAa) でしか戻らない。
+  // つまり 1 文字だけ大文字で始まる語では戻らず、続く助詞の wo が生の
+  // アルファベットのまま蓄積され、画面全体がローマ字に巻き戻っていた。
+  //
+  // ここでは Session を本物の Engine (mock data) と本物のローマ字テーブルで
+  // 構築し、キーイベントを Session::SendKey に流し込む。判定も復帰も
+  // Session::InsertCharacter の本番経路がそのまま走るので、テスト側で規則を
+  // 再現していない。
+  std::cout << "\n[8] 英単語の直後の日本語 (Session 実配線)\n";
+  {
+    struct SessionCase {
+      std::string keys;
+      std::string expected_preedit;
+      std::string note;
+    };
+    const std::vector<SessionCase> session_cases = {
+        {"anoGithub Cliwotsukatte", "あのGithub Cliをつかって",
+         "大文字始まりの英単語の直後に助詞 wo が続く (報告された不具合)"},
+        {"anoGithubwotsukatte", "あのGithubをつかって",
+         "空白なしでも同じ境界で戻る"},
+        {"anoGithubwo", "あのGithubを", "助詞 を だけ"},
+        {"anoGithubde", "あのGithubで", "助詞 で だけ"},
+        {"anoGithubkara", "あのGithubから", "助詞 から"},
+        {"anoGithub Client", "あのGithub Client",
+         "Client はまだ英単語の途中なので戻らない"},
+        {"anoGithub Clinic", "あのGithub Clinic", "Clinic も英単語のまま"},
+        {"GoogleCloud", "GoogleCloud", "CamelCase の複合語は英語のまま"},
+        {"anoGithub Clide", "あのGithub Clide", "Clide も英単語のまま"},
+        {"anoAPIwo", "あのAPIを", "頭字語 API + を"},
+        {"anoGPUwo", "あのGPUを", "頭字語 GPU + を"},
+        {"anoWSLwo", "あのWSLを", "頭字語 WSL + を"},
+        // Shift+大文字のあとも _A にロックされず、続く日本語が日本語として
+        // 入力され続けること。TSF 側が一時モードをコンパートメントに書き込み、
+        // それを次のキーイベントがサーバーへエコーすると、Composer が
+        // comeback_input_mode_ を HALF_ASCII で上書きして復帰先を永久に失って
+        // いた。ロックされていれば "sorewoTodonikaite" は
+        // "それをTodonikaite" のように生のローマ字のままになる。
+        //
+        // 漢字化はこの e2e の変換器がモックなので起きない (mock 辞書に
+        // かい->書い が無い)。ここで固定するのは「日本語入力に戻ること」
+        // であり、漢字化は実辞書を使う経路の責務。
+        {"sorewoTodonikaite", "それをTodoにかいて",
+         "Shift+大文字のあとも日本語入力に戻る (報告された _A ロック)"},
+    };
+
+    for (const SessionCase& session_case : session_cases) {
+      absl::StatusOr<std::unique_ptr<Engine>> engine_or =
+          MockDataEngineFactory::Create();
+      if (!engine_or.ok()) {
+        Report(false, session_case.note, "mock engine を作れない");
+        continue;
+      }
+      Session session(**engine_or);
+
+      Config config;
+      ConfigHandler::GetDefaultConfig(&config);
+      config.set_shift_key_mode_switch(Config::ASCII_INPUT_MODE);
+      config.set_preedit_method(Config::ROMAN);
+      config.set_use_live_conversion(false);
+      config.set_use_dictionary_suggest(false);
+      session.SetConfig(config);
+
+      Request request;
+      session.SetRequest(request);
+
+      std::shared_ptr<Table> table = std::make_shared<Table>();
+      table->InitializeWithRequestAndConfig(request, config);
+      session.SetTable(table);
+
+      Command command;
+      session.IMEOn(&command);
+
+      // Drive the real key path exactly as the TSF client does: a letter key
+      // carries its key code, and Space carries special_key = SPACE (which is
+      // what the keymap binds to InsertSpace).
+      for (const char key : session_case.keys) {
+        command.Clear();
+        mozc::commands::Input* input = command.mutable_input();
+        input->set_type(mozc::commands::Input::SEND_KEY);
+        mozc::commands::KeyEvent* key_event = input->mutable_key();
+        if (key == ' ') {
+          key_event->set_special_key(mozc::commands::KeyEvent::SPACE);
+        } else {
+          key_event->set_key_code(
+              static_cast<uint32_t>(static_cast<unsigned char>(key)));
+        }
+        session.SendKey(&command);
+      }
+
+      ReportEq(session_case.note, session_case.expected_preedit,
+               session.context().composer().GetStringForPreedit());
+
+      // Also commit the composition. A locked _A surfaces here too: the commit
+      // would carry raw romaji ("それをTodonikaite") instead of Japanese, and
+      // the mode would stay HALF_ASCII, so the user would have to turn the IME
+      // off and on again.
+      command.Clear();
+      mozc::commands::Input* commit_input = command.mutable_input();
+      commit_input->set_type(mozc::commands::Input::SEND_KEY);
+      commit_input->mutable_key()->set_special_key(
+          mozc::commands::KeyEvent::ENTER);
+      session.SendKey(&command);
+      if (command.output().has_result()) {
+        ReportEq(absl::StrCat(session_case.note, " (確定)"),
+                 session_case.expected_preedit,
+                 command.output().result().value());
+      }
+      // The mode must be recoverable: the comeback mode is the user's real one.
+      Report(session.context().composer().GetComebackInputMode() != HALF_ASCII &&
+                 session.context().composer().GetComebackInputMode() !=
+                     FULL_ASCII,
+             absl::StrCat(session_case.note, " (復帰先が日本語)"),
+             "comeback mode is ASCII");
+    }
+
+    // Commit through the normal conversion path. Enter accepts whatever is on
+    // screen, so it cannot turn kana into kanji by itself; Space is what asks
+    // the converter for candidates. This case pins the reported end state
+    // "それをTodoに書いて" after the user presses Space then Enter.
+    {
+      absl::StatusOr<std::unique_ptr<Engine>> engine_or =
+          MockDataEngineFactory::Create();
+      if (!engine_or.ok()) {
+        Report(false, "sorewoTodonikaite を SPACE 変換して確定",
+               "mock engine を作れない");
+      } else {
+        Session session(**engine_or);
+        Config config;
+        ConfigHandler::GetDefaultConfig(&config);
+        config.set_shift_key_mode_switch(Config::ASCII_INPUT_MODE);
+        config.set_preedit_method(Config::ROMAN);
+        config.set_use_live_conversion(false);
+        config.set_use_dictionary_suggest(false);
+        session.SetConfig(config);
+        Request request;
+        session.SetRequest(request);
+        std::shared_ptr<Table> table = std::make_shared<Table>();
+        table->InitializeWithRequestAndConfig(request, config);
+        session.SetTable(table);
+
+        Command command;
+        session.IMEOn(&command);
+        for (const char key : std::string("sorewoTodonikaite")) {
+          command.Clear();
+          mozc::commands::Input* input = command.mutable_input();
+          input->set_type(mozc::commands::Input::SEND_KEY);
+          mozc::commands::KeyEvent* key_event = input->mutable_key();
+          key_event->set_key_code(
+              static_cast<uint32_t>(static_cast<unsigned char>(key)));
+          session.SendKey(&command);
+        }
+        ReportEq("sorewoTodonikaite の preedit", "それをTodoにかいて",
+                 session.context().composer().GetStringForPreedit());
+
+        command.Clear();
+        mozc::commands::Input* space_input = command.mutable_input();
+        space_input->set_type(mozc::commands::Input::SEND_KEY);
+        space_input->mutable_key()->set_special_key(
+            mozc::commands::KeyEvent::SPACE);
+        session.SendKey(&command);
+
+        command.Clear();
+        mozc::commands::Input* enter_input = command.mutable_input();
+        enter_input->set_type(mozc::commands::Input::SEND_KEY);
+        enter_input->mutable_key()->set_special_key(
+            mozc::commands::KeyEvent::ENTER);
+        session.SendKey(&command);
+
+        const std::string committed = command.output().has_result()
+                                          ? command.output().result().value()
+                                          : std::string("<no result>");
+        ReportEq("sorewoTodonikaite を SPACE 変換して確定",
+                 "それをTodoに書いて", committed);
+      }
+    }
+
+    // A commit must end the temporary run in Hiragana on BOTH slots, and a
+    // key event that echoes a mode (what the TSF client really does) must not
+    // bring the old mode back. This drives the full Session path with the echo
+    // attached, which is how the residue reached users: Composer::Reset()
+    // restored the stale |comeback_input_mode_|, the client echoed it, and the
+    // user kept typing katakana (or _A) after a commit.
+    {
+      absl::StatusOr<std::unique_ptr<Engine>> echo_engine_or =
+          MockDataEngineFactory::Create();
+      if (!echo_engine_or.ok()) {
+        Report(false, "確定後のモードエコーでもひらがなを維持",
+               "mock engine を作れない");
+      } else {
+        Session session(**echo_engine_or);
+        Config config;
+        ConfigHandler::GetDefaultConfig(&config);
+        config.set_shift_key_mode_switch(Config::ASCII_INPUT_MODE);
+        config.set_preedit_method(Config::ROMAN);
+        config.set_use_live_conversion(false);
+        config.set_use_dictionary_suggest(false);
+        session.SetConfig(config);
+        Request request;
+        session.SetRequest(request);
+        std::shared_ptr<Table> table = std::make_shared<Table>();
+        table->InitializeWithRequestAndConfig(request, config);
+        session.SetTable(table);
+
+        Command command;
+        session.IMEOn(&command);
+
+        // Pin katakana, then layer the temporary Shift+letter ASCII run on it.
+        command.Clear();
+        session.CompositionModeFullKatakana(&command);
+        command.Clear();
+        mozc::commands::Input* shift_input = command.mutable_input();
+        shift_input->set_type(mozc::commands::Input::SEND_KEY);
+        shift_input->mutable_key()->set_key_code('A');
+        session.SendKey(&command);
+        Report(
+            session.context().composer().GetComebackInputMode() ==
+                FULL_KATAKANA,
+            "一時モード中の復帰先はカタカナ",
+            "comeback mode is not FULL_KATAKANA");
+
+        // Commit. Both slots must be Hiragana now.
+        command.Clear();
+        mozc::commands::Input* enter_input = command.mutable_input();
+        enter_input->set_type(mozc::commands::Input::SEND_KEY);
+        enter_input->mutable_key()->set_special_key(
+            mozc::commands::KeyEvent::ENTER);
+        session.SendKey(&command);
+        Report(session.context().composer().GetInputMode() == HIRAGANA,
+               "確定後の input mode はひらがな",
+               "input mode is not HIRAGANA");
+        Report(session.context().composer().GetComebackInputMode() == HIRAGANA,
+               "確定後の comeback mode はひらがな",
+               "comeback mode is not HIRAGANA");
+
+        // Now echo the mode the server itself reports, exactly as the TSF
+        // client does: it reads status().comeback_mode() from the previous
+        // output and puts it back on the next key event. Before the fix that
+        // value was still the stale katakana, so the echo kept the old base
+        // alive and the user stayed in katakana after the commit.
+        const bool reported_comeback_is_hiragana =
+            command.output().has_status() &&
+            command.output().status().comeback_mode() == mozc::commands::HIRAGANA;
+        Report(reported_comeback_is_hiragana,
+               "確定後にサーバーが報告する comeback_mode はひらがな",
+               "reported comeback_mode is not HIRAGANA");
+
+        command.Clear();
+        mozc::commands::Input* echo_input = command.mutable_input();
+        echo_input->set_type(mozc::commands::Input::SEND_KEY);
+        echo_input->mutable_key()->set_key_code('a');
+        echo_input->mutable_key()->set_mode(mozc::commands::HIRAGANA);
+        session.SendKey(&command);
+        Report(session.context().composer().GetInputMode() == HIRAGANA,
+               "エコー後も input mode はひらがな",
+               "echoed mode brought katakana back");
+        ReportEq("エコー後も後続はひらがな", "あ",
+                 session.context().composer().GetStringForPreedit());
+      }
+    }
+
+    // A user-chosen alphanumeric mode (Eisu) has no composition to protect, so
+    // the revert must not fire there: を stays "wo".
+    absl::StatusOr<std::unique_ptr<Engine>> engine_or =
+        MockDataEngineFactory::Create();
+    if (!engine_or.ok()) {
+      Report(false, "英数モードを自分で選んだときは戻らない",
+             "mock engine を作れない");
+    } else {
+      Session session(**engine_or);
+      Config config;
+      ConfigHandler::GetDefaultConfig(&config);
+      config.set_shift_key_mode_switch(Config::ASCII_INPUT_MODE);
+      config.set_preedit_method(Config::ROMAN);
+      config.set_use_live_conversion(false);
+      config.set_use_dictionary_suggest(false);
+      session.SetConfig(config);
+      Request request;
+      session.SetRequest(request);
+      std::shared_ptr<Table> table = std::make_shared<Table>();
+      table->InitializeWithRequestAndConfig(request, config);
+      session.SetTable(table);
+
+      Command command;
+      session.IMEOn(&command);
+      command.Clear();
+      session.CompositionModeHiragana(&command);
+      command.Clear();
+      session.CompositionModeHalfASCII(&command);
+
+      for (const char key : std::string("Githubwo")) {
+        command.Clear();
+        mozc::commands::Input* input = command.mutable_input();
+        input->set_type(mozc::commands::Input::SEND_KEY);
+        mozc::commands::KeyEvent* key_event = input->mutable_key();
+        key_event->set_key_code(
+            static_cast<uint32_t>(static_cast<unsigned char>(key)));
+        session.SendKey(&command);
+      }
+      ReportEq("英数モードを自分で選んだときは戻らない", "Githubwo",
+               session.context().composer().GetStringForPreedit());
+    }
+  }
   // -----------------------------------------------------------------------
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"
             << (g_failures == 0 ? " (すべて通った)\n" : "\n");

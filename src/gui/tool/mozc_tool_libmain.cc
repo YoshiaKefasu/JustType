@@ -144,16 +144,16 @@ std::wstring GetCurrentModuleDirectory() {
 std::wstring GetFallbackTsfProfileIconFile() {
   const std::wstring module_dir = GetCurrentModuleDirectory();
   if (!module_dir.empty()) {
-    return module_dir + L"\\mozc_tip32.dll";
+    return module_dir + L"\\JustType_tip32.dll";
   }
 
   wchar_t program_files_x86[MAX_PATH] = {};
   const DWORD length = ::GetEnvironmentVariableW(
       L"ProgramFiles(x86)", program_files_x86, MAX_PATH);
   if (length > 0 && length < MAX_PATH) {
-    return std::wstring(program_files_x86) + L"\\Mozc\\mozc_tip32.dll";
+    return std::wstring(program_files_x86) + L"\\JustType\\JustType_tip32.dll";
   }
-  return L"C:\\Program Files (x86)\\Mozc\\mozc_tip32.dll";
+  return L"C:\\Program Files (x86)\\JustType\\JustType_tip32.dll";
 }
 
 bool ReadTsfProfileIconFile(std::wstring* icon_file) {
@@ -179,7 +179,7 @@ bool ReadTsfProfileIconFile(std::wstring* icon_file) {
 std::wstring GetTsfProfileIconFileToWrite() {
   std::wstring icon_file;
   if (ReadTsfProfileIconFile(&icon_file) &&
-      EndsWithCaseInsensitive(icon_file, L"\\mozc_tip32.dll")) {
+      EndsWithCaseInsensitive(icon_file, L"\\JustType_tip32.dll")) {
     return icon_file;
   }
   return GetFallbackTsfProfileIconFile();
@@ -275,10 +275,10 @@ int RunMozcTool(int argc, char *argv[]) {
     absl::SetFlag(&FLAGS_mode, "error_message_dialog");
   } else if (binary_name == "WordRegisterDialog") {
     absl::SetFlag(&FLAGS_mode, "word_register_dialog");
-  } else if (binary_name == kProductPrefix "Prelauncher") {
+  } else if (binary_name == kMacBundlePrefix "Prelauncher") {
     // The binary name of prelauncher is user visible in
     // "System Preferences" -> "Accounts" -> "Login items".
-    // So we set kProductPrefix to the binary name.
+    // So we set kMacBundlePrefix to the binary name.
     absl::SetFlag(&FLAGS_mode, "prelauncher");
   }
 #endif  // __APPLE__

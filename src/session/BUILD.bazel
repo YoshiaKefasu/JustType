@@ -308,11 +308,23 @@ mozc_cc_test(
         "//data/dictionary_manual:words.tsv",
     ],
     deps = [
+        ":meltype_bridge",
         ":meltype_piece_pipeline",
+        ":session",
         ":systemone_client",
         ":systemone_logger",
+        "//composer",
+        "//composer:table",
+        "//config:config_handler",
+        "//engine",
+        "//engine:mock_data_engine_factory",
         "//meltype:meltype_segmenter",
+        "//protocol:commands_cc_proto",
+        "//protocol:config_cc_proto",
         "//renderer/win32:win32_font_resource",
+        "//transliteration",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )
 

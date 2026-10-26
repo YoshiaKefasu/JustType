@@ -1,5 +1,13 @@
 ﻿# v0.7.0 Mozkey rename policy
 
+> **Superseded (BUILD 6177).** The v0.7.0 policy deliberately kept the install
+directory, the binary names, the service name and the Windows registry keys as
+> `Mozc`. BUILD 6177 completes the rename: `C:\Program Files (x86)\JustType`,
+> `JustType_*.exe` / `JustType_tip*.dll`, the `JustTypeCacheService` service, the
+> `JustType Offline - Block …` firewall rules and `Software\JustType` are now the
+> real names. The sections below are kept as the historical v0.7.0 record; do not
+> read them as current behaviour.
+
 This document records the rename policy used for the v0.7.0 release.
 
 ## Goal

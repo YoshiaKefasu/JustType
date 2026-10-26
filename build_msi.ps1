@@ -1,4 +1,4 @@
-# Rebuilds Mozc64.msi for the JustType rename (BUILD 6166).
+# Rebuilds JustType64.msi for the JustType rename (BUILD 6177).
 #
 # Mirrors the environment bazel/bazel_wrapper/bazel.bat sets up, against the
 # Bazel 9.0.2 binary .bazeliskrc pins (bazelisk is not on PATH here).
@@ -30,9 +30,9 @@ $env:BAZEL_VC = (& python "$src\build_tools\vs_util.py" 2>&1 | Select-Object -La
 
 "=== bazel exit code: $LASTEXITCODE ===" | Tee-Object -FilePath $log -Append
 
-$msi = "$src\bazel-bin\win32\installer\Mozc64.msi"
+$msi = "$src\bazel-bin\win32\installer\JustType64.msi"
 if (Test-Path $msi) {
-    $dest = 'C:\Temp\Mozc64.msi'
+    $dest = 'C:\Temp\JustType64.msi'
     if (Test-Path $dest) {
         Set-ItemProperty -Path $dest -Name IsReadOnly -Value $false
         Remove-Item $dest -Force

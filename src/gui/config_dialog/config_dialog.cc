@@ -2409,7 +2409,7 @@ void GetComboboxForPreeditMethod(const QComboBox *combobox,
 
 constexpr int kTsfProfileIconIndexDefault = 0;
 
-// These values are TSF language profile icon indices in mozc_tip*.dll, not
+// These values are TSF language profile icon indices in JustType_tip*.dll, not
 // resource IDs.  With the current tip_resource.rc order, IDI_IMM32 is exposed
 // as index 0, the black/white monochrome icons are indices 15 and 16, and the
 // static high-contrast variant that preserves the black icon silhouette is
@@ -2506,7 +2506,7 @@ bool IsTsfProfileIconCurrent(config::Config::WindowsImeIconStyle style) {
 
   return icon_index ==
              static_cast<DWORD>(GetTsfProfileIconIndexForImeIconStyle(style)) &&
-         EndsWithCaseInsensitive(icon_file, L"\\mozc_tip32.dll");
+         EndsWithCaseInsensitive(icon_file, L"\\JustType_tip32.dll");
 }
 
 const wchar_t* GetTsfProfileIconStyleFlagValue(
@@ -2545,7 +2545,7 @@ std::wstring GetMozcToolExecutablePath() {
     return std::wstring();
   }
 
-  constexpr wchar_t kMozcToolFileName[] = L"mozc_tool.exe";
+  constexpr wchar_t kMozcToolFileName[] = L"JustType_tool.exe";
   const size_t separator = current_executable.find_last_of(L"\\/");
   const std::wstring current_file_name =
       separator == std::wstring::npos
@@ -2562,19 +2562,19 @@ std::wstring GetMozcToolExecutablePath() {
   }
 
   if (separator == std::wstring::npos) {
-    LOG(ERROR) << "Cannot resolve mozc_tool.exe path from current executable";
+    LOG(ERROR) << "Cannot resolve JustType_tool.exe path from current executable";
     return std::wstring();
   }
 
   const std::wstring current_dir = current_executable.substr(0, separator);
-  const std::wstring mozc_tool = current_dir + L"\\mozc_tool.exe";
+  const std::wstring mozc_tool = current_dir + L"\\JustType_tool.exe";
   const DWORD attributes = ::GetFileAttributesW(mozc_tool.c_str());
   if (attributes != INVALID_FILE_ATTRIBUTES &&
       (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0) {
     return mozc_tool;
   }
 
-  LOG(ERROR) << "mozc_tool.exe is not found next to current executable";
+  LOG(ERROR) << "JustType_tool.exe is not found next to current executable";
   return std::wstring();
 }
 

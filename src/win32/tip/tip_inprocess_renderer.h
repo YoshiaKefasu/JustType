@@ -17,7 +17,7 @@ namespace tsf {
 // This path is used only for immersive TSF hosts. Creating the renderer popups
 // in the host process, with the host top-level HWND supplied at creation time,
 // lets Windows keep them in the host's presentation layer. Conventional desktop
-// applications continue to use mozc_renderer.exe.
+// applications continue to use JustType_renderer.exe.
 class TipInProcessRenderer {
  public:
   TipInProcessRenderer() = delete;

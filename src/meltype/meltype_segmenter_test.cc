@@ -244,6 +244,20 @@ int main() {
   Expect("っちゃうってっぽい", "cchautteppoi", Final(),
          "JA:っちゃうってっぽい");
 
+  // 促音の安全ルールは、英語の保護より先に見る (原本 CompositionDetector の順序)。
+  // 短い英単語の最後の子音が次の文字と重なって促音になるなら、それは日本語の
+  // 途中であって英単語ではない。以前は保護の方が先に走っていたため、辞書に
+  // あったマイナー語 teat が安全ルールをすり抜け、kaiteatta が
+  // kai + teat + ta に引き裂かれていた。
+  Expect("かいてあった (teat の誤爆をしない)", "kaiteatta", Final(),
+         "JA:かいてあった");
+  Expect("かいてあった を", "kaiteattayo", Final(), "JA:かいてあったよ");
+
+  // 安全ルールは日本語を打っている途中の区間だけに効く。入力の先頭や英文の
+  // 途中で、綴りが偶然促音の形になっても英単語のまま (goodday, meetthe)。
+  Expect("goodday は英語のまま", "goodday", Final(), "EN:goodday");
+  Expect("meetthe は英語のまま", "meetthe", Final(), "EN:meetthe");
+
   std::cout << "\n[8] 大文字の頭字語 (アクロニム) と日本語の境界\n";
   // 大文字の連続 (WSL, CPU, GPU, API) は英単語辞書に無くても英語の 1 語として
   // 切り出し、直後の日本語 (から起動して) を巻き込まない。以前は大文字の塊の
@@ -267,6 +281,17 @@ int main() {
   Expect("Google (TitleCase)", "Google", Final(), "EN:Google");
   Expect("iPhone を", "iPhonewo", Final(), "EN:iPhone|JA:を");
   Expect("ChatGPT に", "ChatGPTni", Final(), "EN:ChatGPT|JA:に");
+  // 大文字始まりの固有名詞 Todo の直後に助詞が続いても、全体を英語にしない。
+  // propernouns.txt に無かったときは Todoniirete... が 1 つの英単語に化けていた。
+  //
+  // Note: 「Todoni」だけを打ったときは、両方とも実在の英字の並びなので
+  // まだ 1 語として残る。分割が確定するのは日本語が続く場合 (下の 2 つ)。
+  Expect("Todo にいれて", "Todoniirete", Final(), "EN:Todo|JA:にいれて");
+  Expect("それを Todo にいれておいてください",
+         "sorewoTodoniireteoitekudasai", Final(),
+         "JA:それを|EN:Todo|JA:にいれておいてください");
+  Expect("Todo を", "Todowo", Final(), "EN:Todo|JA:を");
+  Expect("Todo です", "Tododesu", Final(), "EN:Todo|JA:です");
 
 
   std::cout << "\n[9] CamelCase 複合語の単語境界\n";

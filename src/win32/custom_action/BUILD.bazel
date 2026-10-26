@@ -42,7 +42,7 @@ mozc_win32_cc_prod_binary(
         "resource.h",
     ],
     executable_name_map = {
-        "Mozc": "mozc_installer_helper.dll",
+        "Mozc": "JustType_installer_helper.dll",
         "GoogleJapaneseInput": "GoogleIMEJaInstallerHelper.dll",
     },
     linkshared = True,

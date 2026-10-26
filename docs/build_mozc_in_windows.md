@@ -17,10 +17,10 @@ python build_tools/update_deps.py
 python build_tools/build_qt.py --release --confirm_license
 bazelisk build package --config release_build
 
-python build_tools/open.py bazel-bin/win32/installer/Mozc64.msi
+python build_tools/open.py bazel-bin/win32/installer/JustType64.msi
 ```
 
-> [!TIP] You can also download `Mozc64.msi` from GitHub Actions. Check
+> [!TIP] You can also download `JustType64.msi` from GitHub Actions. Check
 > [Build with GitHub Actions](#build-with-github-actions) for details.
 
 ## Setup
@@ -104,7 +104,7 @@ bazelisk build package --config release_build
 After building Mozc, run the following command to install it:
 
 ```
-python build_tools/open.py bazel-bin/win32/installer/Mozc64.msi
+python build_tools/open.py bazel-bin/win32/installer/JustType64.msi
 ```
 
 #### Uninstall Mozc
@@ -120,7 +120,7 @@ Then, uninstall `Mozc` from the list of installed applications.
 
 ### Cross compilation
 
-By default, `Mozc64.msi` is built for the host CPU architecture. To explicitly
+By default, `JustType64.msi` is built for the host CPU architecture. To explicitly
 specify the target CPU architecture, specify build options as follows:
 
 #### To build x64 installer
@@ -172,8 +172,8 @@ install Mozc with your own commit as follows.
 2.  Push a new commit to your own fork.
 3.  Click "Actions" tab on your fork.
 4.  Wait until the action triggered by your commit succeeds.
-5.  Download `Mozc64.msi` from the action result page.
-6.  Install `Mozc64.msi`.
+5.  Download `JustType64.msi` from the action result page.
+6.  Install `JustType64.msi`.
 
 Files on the GitHub Actions page remain available for up to 90 days.
 
@@ -186,7 +186,7 @@ even if downloaded from https://github.com/google/mozc/.
     [recent successful Windows runs](https://github.com/google/mozc/actions/workflows/windows.yaml?query=is%3Asuccess)
     in the google/mozc repository.
 3.  Find an action from the last 90 days and click it.
-4.  Download `Mozc64.msi` from the action result page if you are using 64-bit
+4.  Download `JustType64.msi` from the action result page if you are using 64-bit
     Windows.
 
 --------------------------------------------------------------------------------

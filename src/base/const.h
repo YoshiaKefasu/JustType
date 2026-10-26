@@ -35,8 +35,8 @@ namespace mozc {
 inline constexpr char kProductNameInEnglish[] = "Google Japanese Input";
 #define kProductPrefix "GoogleJapaneseInput"
 #else  // GOOGLE_JAPANESE_INPUT_BUILD
-inline constexpr char kProductNameInEnglish[] = "Mozc";
-#define kProductPrefix "Mozc"
+inline constexpr char kProductNameInEnglish[] = "JustType";
+#define kProductPrefix "JustType"
 #endif  // GOOGLE_JAPANESE_INPUT_BUILD
 
 inline constexpr char kVersionRewriterVersionPrefix[] = kProductPrefix "-";
@@ -98,47 +98,57 @@ inline constexpr wchar_t kMozcRegKey[] =
 inline constexpr wchar_t kElevatedProcessDisabledKey[] =
     L"Software\\Policies\\Google\\Google Japanese Input\\Preferences";
 #else   // !GOOGLE_JAPANESE_INPUT_BUILD
-inline constexpr char kCompanyNameInEnglish[] = "Mozc Project";
+inline constexpr char kCompanyNameInEnglish[] = "JustType Project";
 // Directory name of the user profile directory under %LocalLow%.
 // The product was renamed from Mozc to JustType, so a fresh install uses
 // "JustType" while "Mozc" is kept for users who already have that directory.
-// Note that this is intentionally different from |kProductNameInEnglish|,
-// which still names the install directory and the binaries.
+// See SystemUtil::ResolveUserProfileDirectoryName() for the resolution rule.
 inline constexpr char kUserProfileDirectoryName[] = "JustType";
 inline constexpr char kLegacyUserProfileDirectoryName[] = "Mozc";
 // Use Local prefix so that modules running under AppContainer can access.
-inline constexpr char kEventPathPrefix[] = "Local\\Mozc.event.";
-inline constexpr char kMutexPathPrefix[] = "Local\\Mozc.mutex.";
-inline constexpr char kMozcServerName[] = "mozc_server.exe";
-inline constexpr char kIMEFile[] = "mozc_ja.ime";
-inline constexpr char kMozcTIP32[] = "mozc_tip32.dll";
-inline constexpr char kMozcTIP64[] = "mozc_tip64.dll";
-inline constexpr char kMozcTIP64X[] = "mozc_tip64x.dll";
-inline constexpr char kMozcBroker[] = "mozc_broker.exe";
-inline constexpr char kMozcTool[] = "mozc_tool.exe";
-inline constexpr char kMozcRenderer[] = "mozc_renderer.exe";
-inline constexpr char kMozcCacheServiceExeName[] = "mozc_cache_service.exe";
-inline constexpr wchar_t kMozcCacheServiceName[] = L"MozcCacheService";
+inline constexpr char kEventPathPrefix[] = "Local\\JustType.event.";
+inline constexpr char kMutexPathPrefix[] = "Local\\JustType.mutex.";
+inline constexpr char kMozcServerName[] = "JustType_server.exe";
+inline constexpr char kIMEFile[] = "JustType_ja.ime";
+inline constexpr char kMozcTIP32[] = "JustType_tip32.dll";
+inline constexpr char kMozcTIP64[] = "JustType_tip64.dll";
+inline constexpr char kMozcTIP64X[] = "JustType_tip64x.dll";
+inline constexpr char kMozcBroker[] = "JustType_broker.exe";
+inline constexpr char kMozcTool[] = "JustType_tool.exe";
+inline constexpr char kMozcRenderer[] = "JustType_renderer.exe";
+inline constexpr char kMozcCacheServiceExeName[] =
+    "JustType_cache_service.exe";
+inline constexpr wchar_t kMozcCacheServiceName[] = L"JustTypeCacheService";
 inline constexpr wchar_t kMessageReceiverMessageName[] =
-    L"mozc.renderer.message";
-inline constexpr wchar_t kMessageReceiverClassName[] = L"mozc.renderer.window";
-inline constexpr wchar_t kCandidateWindowClassName[] = L"MozcCandidateWindow";
+    L"justtype.renderer.message";
+inline constexpr wchar_t kMessageReceiverClassName[] =
+    L"justtype.renderer.window";
+inline constexpr wchar_t kCandidateWindowClassName[] =
+    L"JustTypeCandidateWindow";
 inline constexpr wchar_t kCompositionWindowClassName[] =
-    L"MozcCompositionWindow";
-inline constexpr wchar_t kIndicatorWindowClassName[] = L"MozcIndicatorWindow";
-inline constexpr wchar_t kInfolistWindowClassName[] = L"MozcInfolistWindow";
-inline constexpr wchar_t kIMEUIWndClassName[] = L"MozcUIWindow";
-inline constexpr char kIPCPrefix[] = "\\\\.\\pipe\\mozc.";
-inline constexpr wchar_t kCandidateUIDescription[] = L"MozcCandidateUI";
-inline constexpr wchar_t kConfigurationDisplayname[] = L"Mozc Configuration";
-inline constexpr wchar_t kMozcRegKey[] = L"Software\\Mozc Project\\Mozc";
+    L"JustTypeCompositionWindow";
+inline constexpr wchar_t kIndicatorWindowClassName[] =
+    L"JustTypeIndicatorWindow";
+inline constexpr wchar_t kInfolistWindowClassName[] = L"JustTypeInfolistWindow";
+inline constexpr wchar_t kIMEUIWndClassName[] = L"JustTypeUIWindow";
+inline constexpr char kIPCPrefix[] = "\\\\.\\pipe\\justtype.";
+inline constexpr wchar_t kCandidateUIDescription[] = L"JustTypeCandidateUI";
+inline constexpr wchar_t kConfigurationDisplayname[] =
+    L"JustType Configuration";
+inline constexpr wchar_t kMozcRegKey[] = L"Software\\JustType";
 inline constexpr wchar_t kElevatedProcessDisabledKey[] =
-    L"Software\\Policies\\Mozc Project\\Mozc\\Preferences";
+    L"Software\\Policies\\JustType\\Preferences";
 #endif  // GOOGLE_JAPANESE_INPUT_BUILD
 #elif defined(__APPLE__)
-inline constexpr char kMozcServerName[] = kProductPrefix "Converter.app";
-inline constexpr char kMozcRenderer[] = kProductPrefix "Renderer.app";
-inline constexpr char kMozcTool[] = kProductPrefix "Tool.app";
+// macOS bundle names are derived from the Bazel BRANDING in config.bzl, which is
+// still "Mozc" for the OSS build (the macOS installer, its pkgproj, the
+// LaunchAgents and the uninstaller all reference <BRANDING>.app).  Keep this
+// separate from |kProductPrefix| so that renaming the Windows binaries does not
+// silently rename the macOS bundles out from under the installer.
+inline constexpr char kMacBundlePrefix[] = "Mozc";
+inline constexpr char kMozcServerName[] = kMacBundlePrefix "Converter.app";
+inline constexpr char kMozcRenderer[] = kMacBundlePrefix "Renderer.app";
+inline constexpr char kMozcTool[] = kMacBundlePrefix "Tool.app";
 #ifdef GOOGLE_JAPANESE_INPUT_BUILD
 inline constexpr char kEventPathPrefix[] = "GoogleJapaneseInput.event.";
 #else   // GOOGLE_JAPANESE_INPUT_BUILD

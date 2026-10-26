@@ -42,7 +42,7 @@ namespace mac {
 bool MacServerSendCommand::SendCommand(const mozc::commands::SessionCommand &command,
                                        mozc::commands::Output *output) {
   NSConnection *connection =
-      [NSConnection connectionWithRegisteredName:@kProductPrefix "_Renderer_Connection" host:nil];
+      [NSConnection connectionWithRegisteredName:@kMacBundlePrefix "_Renderer_Connection" host:nil];
   const std::string command_string = command.SerializeAsString();
   NSData *sending_data = [NSData dataWithBytes:command_string.data() length:command_string.size()];
   id peer = [connection rootProxy];

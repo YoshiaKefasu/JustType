@@ -114,7 +114,7 @@ After preparing the daily dictionary, build Mozc from `src/`:
 cd src
 bazelisk build --config oss_windows --config release_build //data/dictionary_oss:dictionary_data
 bazelisk build --config oss_windows --config release_build package
-python build_tools/open.py bazel-bin/win32/installer/Mozc64.msi
+python build_tools/open.py bazel-bin/win32/installer/JustType64.msi
 cd ..
 ```
 

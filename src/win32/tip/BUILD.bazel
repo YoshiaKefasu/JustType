@@ -80,7 +80,7 @@ mozc_win32_cc_prod_binary(
     name = "mozc_tip32",
     srcs = ["mozc_tip_main.cc"],
     executable_name_map = {
-        "Mozc": "mozc_tip32.dll",
+        "Mozc": "JustType_tip32.dll",
         "GoogleJapaneseInput": "GoogleIMEJaTIP32.dll",
     },
     linkshared = True,
@@ -99,7 +99,7 @@ mozc_win32_cc_prod_binary(
     name = "mozc_tip64",
     srcs = ["mozc_tip_main.cc"],
     executable_name_map = {
-        "Mozc": "mozc_tip64.dll",
+        "Mozc": "JustType_tip64.dll",
         "GoogleJapaneseInput": "GoogleIMEJaTIP64.dll",
     },
     linkshared = True,
@@ -118,7 +118,7 @@ mozc_win32_cc_prod_binary(
     name = "mozc_tip64arm",
     srcs = ["mozc_tip_main.cc"],
     executable_name_map = {
-        "Mozc": "mozc_tip64arm.dll",
+        "Mozc": "JustType_tip64arm.dll",
         "GoogleJapaneseInput": "GoogleIMEJaTIP64Arm.dll",
     },
     linkshared = True,
@@ -191,7 +191,7 @@ genrule(
     srcs = [
         "//base:mozc_version_txt",
     ],
-    outs = ["mozc_tip64x.dll" if BRANDING == "Mozc" else "GoogleIMEJaTIP64X.msi"],
+    outs = ["JustType_tip64x.dll" if BRANDING == "Mozc" else "GoogleIMEJaTIP64X.msi"],
     cmd = " ".join([
         "$(location :build_tip_forwarder_dll)",
         "--output=$@",

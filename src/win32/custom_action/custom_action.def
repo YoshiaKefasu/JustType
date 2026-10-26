@@ -11,8 +11,8 @@ EXPORTS
     SaveCustomActionData
     RestoreServiceState
     StopCacheService
-    InstallMozcFirewallRules
-    RemoveMozcFirewallRules
+    InstallJustTypeFirewallRules
+    RemoveJustTypeFirewallRules
     InitialInstallation
     InitialInstallationCommit
     EnableTipProfile

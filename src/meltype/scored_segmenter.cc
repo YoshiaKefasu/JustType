@@ -599,6 +599,20 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
         std::all_of(span.begin() + 1, span.end(), [](char c) { return IsLowerAscii(c); });
     if (!is_title_case && !dictionaries_.proper.ContainsWord(lower)) return false;
   }
+  // 短い区間の最後の子音が、次の音と合わせて っ になる (u|lo|t + ti = ぉっち) なら、
+  // 英単語 (lot) ではなく日本語の途中。
+  if (lower.size() <= 4 && next && ToLowerAscii(*next) == lower.back() &&
+      lower.back() != 'a' && lower.back() != 'i' && lower.back() != 'u' &&
+      lower.back() != 'e' && lower.back() != 'o' && lower.back() != 'n' &&
+      romaji_.AnalyzeFragment(lower.substr(0, lower.size() - 1)).is_valid &&
+      // 日本語を打っている途中の区間だけが対象。入力の先頭や英文の途中
+      // (goodday, meetthe) は、綴りが偶然 促音の形でも英単語のまま。
+      before < 0 &&
+      // 固有名詞として登録した語 (tab) は、その語自身が英語の根拠。
+      // 辞書に無い綴り (teat のような短い一般語) だけを日本語に戻す。
+      !dictionaries_.proper.ContainsWord(lower)) {
+    return false;
+  }
   // 促音の境界 (この区間の末尾の子音と、すぐ次の文字が同じ) は、英語の区間を
   // 日本語の促音「っ」に潰す結合をここで止める。英単語 (tab) の後ろに日本語
   // (botan) が続いても、tab + botan = たっぼたん にはしない。
@@ -610,14 +624,6 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
        dictionaries_.proper.ContainsWord(lower)) &&
       !dictionaries_.japanese.HasPrefix(lower + ToLowerAscii(*next))) {
     return true;
-  }
-  // 短い区間の最後の子音が、次の音と合わせて っ になる (u|lo|t + ti = ぉっち) なら、
-  // 英単語 (lot) ではなく日本語の途中。
-  if (lower.size() <= 4 && next && ToLowerAscii(*next) == lower.back() &&
-      lower.back() != 'a' && lower.back() != 'i' && lower.back() != 'u' &&
-      lower.back() != 'e' && lower.back() != 'o' && lower.back() != 'n' &&
-      romaji_.AnalyzeFragment(lower.substr(0, lower.size() - 1)).is_valid) {
-    return false;
   }
   // 数字のすぐ前の、ローマ字として読めない子音で始まる短い英字 (kaibunsho|rta|2026): 略語。
   if (next && IsDigit(*next) && span.size() >= 2 && span.size() <= 6 &&

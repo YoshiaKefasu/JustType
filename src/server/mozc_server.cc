@@ -80,14 +80,14 @@ void InitMozcAndMozcServer(const char *arg0, int *argc, char ***argv,
       mozc::RunLevel::GetRunLevel(mozc::RunLevel::SERVER);
 
   if (run_level >= mozc::RunLevel::DENY) {
-    LOG(FATAL) << "Do not execute Mozc server as high authority";
+    LOG(FATAL) << "Do not execute JustType server as high authority";
     return;
   }
 
   mozc::InitMozc(arg0, argc, argv);
 
   if (run_level == mozc::RunLevel::RESTRICTED) {
-    MOZC_VLOG(1) << "Mozc server starts with timeout mode";
+    MOZC_VLOG(1) << "JustType server starts with timeout mode";
     absl::SetFlag(&FLAGS_restricted, true);
   }
 }
@@ -96,7 +96,7 @@ int MozcServer::Run() {
   std::string mutex_name = "server";
   mozc::ProcessMutex mutex(mutex_name);
   if (!mutex.Lock()) {
-    LOG(INFO) << "Mozc Server is already running";
+    LOG(INFO) << "JustType Server is already running";
     return -1;
   }
 

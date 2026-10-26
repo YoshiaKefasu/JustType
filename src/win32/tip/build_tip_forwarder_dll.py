@@ -106,35 +106,35 @@ class ForwarderInfo:
   @property
   def forwarder_dll_name(self) -> str:
     return {
-        'Mozc': 'mozc_tip64x.dll',
+        'Mozc': 'JustType_tip64x.dll',
         'GoogleJapaneseInput': 'GoogleIMEJaTIP64X.dll',
     }[self.branding]
 
   @property
   def x64_impl_dll_name(self) -> str:
     return {
-        'Mozc': 'mozc_tip64.dll',
+        'Mozc': 'JustType_tip64.dll',
         'GoogleJapaneseInput': 'GoogleIMEJaTIP64.dll',
     }[self.branding]
 
   @property
   def arm64_impl_dll_name(self) -> str:
     return {
-        'Mozc': 'mozc_tip64arm.dll',
+        'Mozc': 'JustType_tip64arm.dll',
         'GoogleJapaneseInput': 'GoogleIMEJaTIP64Arm.dll',
     }[self.branding]
 
   @property
   def file_description(self) -> str:
     return {
-        'Mozc': 'Mozc TIP Module Forwarder',
+        'Mozc': 'JustType TIP Module Forwarder',
         'GoogleJapaneseInput': 'Google 日本語入力 TIP モジュール フォワーダー',
     }[self.branding]
 
   @property
   def product_name(self) -> str:
     return {
-        'Mozc': 'Mozc',
+        'Mozc': 'JustType',
         'GoogleJapaneseInput': 'Google 日本語入力',
     }[self.branding]
 
