@@ -69,6 +69,48 @@ bool IsUpperAscii(char c) { return c >= 'A' && c <= 'Z'; }
 
 bool IsDigit(char c) { return c >= '0' && c <= '9'; }
 
+// 英単語のすぐ後ろに来たら日本語の頭とみなす文字。母音 (さ・し・す・せ・そ) と、
+// そこから始まる拗音の 'h' (しゃ・しゅ・しょ)・'y' (しゃ)。
+bool IsJapaneseOpener(char c) {
+  switch (c) {
+    case 'a':
+    case 'i':
+    case 'u':
+    case 'e':
+    case 'o':
+    case 'h':
+    case 'y':
+      return true;
+    default:
+      return false;
+  }
+}
+
+// ドット付きの製品名・ファイル名の末尾として認める拡張子。ここを列挙するのは、
+// 任意の末尾を許すと「Next.jsd」のような、後ろの日本語を飲み込んだ区間まで
+// 英語になってしまうため。
+bool IsKnownDotSuffix(std::string_view suffix) {
+  for (const std::string_view known :
+       {"js", "ts", "jsx", "tsx", "py", "go", "rs", "rb", "php", "kt",
+        "css", "scss", "html", "json", "yaml", "yml", "toml", "md", "sh",
+        "sql", "io", "ai", "app", "dev", "com", "net", "org",
+        // 開発・システムで頻出のファイル拡張子 (file.exe, setup.bat)。
+        "exe", "dll", "bat", "ps1", "log", "txt", "csv", "xml", "zip",
+        "png", "jpg", "svg"}) {
+    if (suffix.size() == known.size()) {
+      bool same = true;
+      for (std::size_t i = 0; i < suffix.size(); ++i) {
+        const char a = suffix[i] >= 'A' && suffix[i] <= 'Z'
+                           ? static_cast<char>(suffix[i] - 'A' + 'a')
+                           : suffix[i];
+        if (a != known[i]) same = false;
+      }
+      if (same) return true;
+    }
+  }
+  return false;
+}
+
 // 全部大文字の頭字語 (WSL, CPU, GPU, API 等)。英単語辞書に無くても 1 語として
 // 扱うための判定。2〜8 文字に限るのは、長い大文字の並び (英文の見出しなど) を
 // 頭字語と誤認しないため。
@@ -218,6 +260,48 @@ struct Path {
 };
 
 }  // namespace
+
+bool IsIdentifierToken(const std::string_view token) {
+  if (token.size() < 2 || token.size() > 24) return false;
+  std::size_t letters = 0;
+  std::size_t first_non_letter = std::string_view::npos;
+  for (std::size_t i = 0; i < token.size(); ++i) {
+    const char c = token[i];
+    if (IsAsciiLetter(c)) {
+      ++letters;
+      continue;
+    }
+    if (first_non_letter == std::string_view::npos) first_non_letter = i;
+    // 英字以外は、識別子に現れる記号だけを認める。空白・カンマ・スラッシュは
+    // 英文の区切りなので、ここで英語区間にしてはいけない。
+    if (!IsDigit(c) && c != '+' && c != '#' && c != '.') return false;
+  }
+  if (letters == 0) return false;  // 数字だけ (2024) は英語にしない
+  if (first_non_letter == std::string_view::npos) return false;  // 英字だけ
+
+  const char last = token.back();
+  // node.js / vue.js / file.exe — 末尾の拡張子が既知のときだけ。任意の末尾を
+  // 許すと「Next.jsd」のように後ろの日本語を飲み込んだ区間まで英語になってしまう。
+  const std::size_t dot = token.rfind('.');
+  if (dot != std::string_view::npos && dot + 1 < token.size() &&
+      IsKnownDotSuffix(token.substr(dot + 1))) {
+    return true;
+  }
+
+  // ここからは数字・記号で終わる形 (S3, N+1, ES6, C++, C#)。
+  // 先頭の英字部分は 1〜3 文字で、先頭が大文字であること。これが無いと
+  // 「AWSのS3」(AWSnoS3) や「あのN+1」(anoN+1) のように、前の日本語の
+  // ローマ字ごと 1 つの識別子として飲み込んでしまう ("noS3" の "no" は の)。
+  if (first_non_letter == 0 || first_non_letter > 3) return false;
+  // 先頭は英字 (first_non_letter != 0) なので、大文字であることをここで見れば
+  // 先頭の英字が大文字であることも同時に確定する。
+  if (!IsUpperAscii(token.front())) return false;
+  // C++ / C# — 記号で終わるので、続く英字は日本語の頭。
+  if (last == '#') return true;
+  if (last == '+') return token.size() >= 3 && token[token.size() - 2] == '+';
+  // S3 / N+1 / ES6 / IPv4 — 数字で終わるので、続く英字は日本語の頭。
+  return IsDigit(last);
+}
 
 // Segment は同名のメソッドに隠されるので、別名で扱う。
 using Segment = ScoredSegmenter::Segment;
@@ -522,13 +606,30 @@ bool Context::CanBeEnglishSpan(int start, int end, bool growing,
   bool has_upper = false;
   bool has_apostrophe = false;
   bool has_non_letter = false;
+  bool has_separator = false;
   for (char c : Sub(start, end)) {
     if (IsUpperAscii(c)) has_upper = true;
     if (c == '\'') has_apostrophe = true;
     if (!IsAsciiLetter(c)) has_non_letter = true;
+    // 空白とカンマは英文の区切り。英語区間の中に入れてはいけない
+    // (hello world は 2 語として扱う)。
+    if (c == ' ' || c == '\t' || c == ',' || c == ';' || c == ':' || c == '/' ||
+        c == '\\') {
+      has_separator = true;
+    }
   }
-  // 記号・空白の入る区間は英語にしない (英文の中の記号は別の区間として扱う)。
-  if (has_non_letter) return false;
+  if (has_separator) return false;
+  // 記号・数字を含む区間は、識別子の形 (S3, C++, N+1, node.js) か、辞書に
+  // 載っている綴り (k8s, e2e, ipv4) のときだけ英語にする。形が自分で終わりを
+  // 決めるので、後ろの日本語を飲み込むことはない。同梱の英単語の一覧は英字
+  // だけなので、数字混じりの綴りがここを通るのは固有名詞に登録したものだけ。
+  if (has_non_letter) {
+    const std::string_view span = Sub(start, end);
+    if (IsIdentifierToken(span)) return true;
+    const std::string lower = ToLowerAscii(span);
+    return dictionaries_.english.ContainsWord(lower) ||
+           dictionaries_.proper.ContainsWord(lower);
+  }
 
   // 大文字の連続 (アクロニム・頭字語) の途中でスパンを開始・終了しない。
   // これが無いと GPUkarakidoushite が「GP」+「Uからきどうして」のように
@@ -573,10 +674,23 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
   // まだ続きを打つかもしれない末尾の区間 (打ちかけの英単語を英語と見てよい)。
   const bool growing = at_end && !options_.final;
   if (span.empty()) return false;
-  for (char c : span) {
-    if (!IsAsciiLetter(c)) return false;
-  }
+  // 識別子 (S3, C++, N+1, node.js) は英字だけではないが 1 語として英語。
+  if (IsIdentifierToken(span)) return true;
   const std::string lower = ToLowerAscii(span);
+  // 英字だけの区間はこの下の判定に任せる。数字や記号を含む区間は、辞書に
+  // 載っている綴り (k8s, e2e, ipv4) だけを英語にする。同梱の英単語の一覧は
+  // 英字だけなので、辞書に無い数字混じりの綴りは日本語のまま残る。
+  bool letters_only = true;
+  for (char c : span) {
+    if (!IsAsciiLetter(c)) {
+      letters_only = false;
+      break;
+    }
+  }
+  if (!letters_only) {
+    return dictionaries_.english.ContainsWord(lower) ||
+           dictionaries_.proper.ContainsWord(lower);
+  }
 
   // 小文字の語の末尾が大文字 1 文字 (holoX → ほぉX になっていた)。
   if (IsTrailingCapitalName(span, next)) return true;
@@ -1062,7 +1176,19 @@ std::vector<Segment> Context::Run() {
       offer(i + length, false, std::move(japanese_path));
 
       // 英語の区間として i から j まで取る (IsEnglishSpan が英語と言える区間だけ)。
-      for (int j = n_; j > i; --j) {
+      //
+      // 英単語のすぐ後ろの 's' + 母音は日本語の頭 (Discord|saba, Slack|sumaho,
+      // Chrome|sa-ba)。ここから英語の区間を始めると、saba や sumaho のように
+      // それ自体が英単語としても登録されている綴りが複数形の続きとして飲まれ、
+      // Discord ごと 1 語に化ける。判定は直前の 1 文字が英字かどうかだけを見る
+      // (空白で区切られた英文の 2 語目、"Google search" の search は直前が空白
+      // なので今までどおり英語のまま)。この位置ごとに決まるので、ループの外で
+      // 判定して、該当するときは英語の区間を取るループごと飛ばす。
+      const bool s_starts_japanese =
+          i > 0 && input_[static_cast<std::size_t>(i)] == 's' &&
+          IsAsciiLetter(input_[static_cast<std::size_t>(i) - 1]) &&
+          i + 1 < n_ && IsJapaneseOpener(input_[static_cast<std::size_t>(i) + 1]);
+      for (int j = n_; j > i && !s_starts_japanese; --j) {
         // 英単語 + は に分かれるところの 1 音 (medals の後の sha) は、それだけで
         // 英単語にしない (medalssha になってしまう)。
         if (j == i + 3 && split_particle_[static_cast<std::size_t>(i)]) continue;
@@ -1087,6 +1213,17 @@ std::vector<Segment> Context::Run() {
         // 辞書にある 's' 終わりの短い英単語 (stops) が長さの 2 乗で勝つのを防ぐ。
         if (j - i >= 3 && input_[static_cast<std::size_t>(j) - 1] == 's' &&
             IsSuruForm(JapaneseKana(j - 1, n_))) {
+          continue;
+        }
+        // 英語の末尾 's' が後続の母音と 1 音 (sa/shi/su/se/so) を作るなら、その
+        // 's' は複数形ではなく後ろに続く日本語の頭。Android|sumaho を
+        // Androids|umaho にしない (複数形の 's' と「す」の 's' の衝突)。
+        // 区間 [i, j) を却下すると DP は j-1 で切るので、英単語本体
+        // (Android) が英語、's' から先が日本語になる。
+        if (j - i >= 3 && j < n_ &&
+            input_[static_cast<std::size_t>(j) - 1] == 's' &&
+            syllable_readable_[static_cast<std::size_t>(j) - 1] &&
+            syllable_length_[static_cast<std::size_t>(j) - 1] >= 2) {
           continue;
         }
         if (!IsEnglishSpan(Sub(i, j),
@@ -1178,6 +1315,12 @@ std::size_t MeltypeDictionaries::LoadFromDirectory(const std::string& directory,
       }
     }
   }
+  // 前方一致列挙 (英語の語がまだ伸びるかを見る) 用の索引。読み込み完了後に 1 回だけ
+  // 作る。遅延構築にするとキーフックのスレッドから複数セッションが同時に触って競合する。
+  out.english.BuildIndex();
+  out.proper.BuildIndex();
+  out.spell.BuildIndex();
+  out.readable.BuildIndex();
   return total;
 }
 

@@ -45,6 +45,17 @@ struct MeltypeDictionaries {
                                        MeltypeDictionaries& out);
 };
 
+// True when |token| is an identifier-like IT token that Japanese users type as
+// one unit even though it is not made of letters only: S3, N+1, ES6, C++, C#,
+// and dotted product or file names (node.js, vue.js, file.exe, setup.bat).
+//
+// The digit and symbol shapes end with a digit or a symbol, which makes them
+// self-delimiting: a longer span that swallows the Japanese letters after the
+// token ("S3b", "C++g") no longer matches.  A dotted name is delimited by the
+// closed list of known suffixes instead.  Either way the English piece ends
+// exactly where the token does and the rest is left to the Japanese side.
+bool IsIdentifierToken(std::string_view token);
+
 class ScoredSegmenter {
  public:
   // 区間分けの結果の 1 つ。

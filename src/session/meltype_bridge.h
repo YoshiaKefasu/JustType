@@ -77,6 +77,33 @@ class MeltypeBridge {
   // opinion, and the ASCII run continues exactly as before.
   static bool EndsTemporaryShiftAsciiRun(std::string_view raw, char letter);
 
+  // True when some word starts with |prefix| and the part after |stem| is not
+  // itself an English word.
+  //
+  // This is what tells a longer word the user is still typing from a compound of
+  // the word already on screen: "ab" continues "abandon" (remainder "bandon" is
+  // not a word) so the run must stay ASCII, while "oneh" only continues
+  // "onehanded"/"onehood"/"onehow" (remainders "handed"/"hood"/"how" are all
+  // words) so "One" is finished and Japanese has begun.
+  static bool HasNonCompoundContinuation(std::string_view prefix,
+                                        std::string_view stem);
+
+  // How many ASCII letters at the END of |raw| Meltype assigns to Japanese once
+  // |letter| is typed.
+  //
+  // The decision to end the run is made on the keystroke that types the first
+  // Japanese letter, and some letters of the Japanese syllable were already
+  // inserted as raw ASCII before the boundary could be known: "Android" + "s"
+  // is Android + す, but "Androids" is also an English plural, so the boundary
+  // only becomes visible on the "u".  By then the "s" sits in the composition
+  // as ASCII.  This reports how many such letters there are so the caller can
+  // re-insert them in Hiragana.  All of them are ASCII letters, so the count is
+  // the same in bytes and in composition characters.
+  //
+  // 0 means "nothing to rewrite".
+  static std::size_t JapaneseTailLength(std::string_view raw, char letter);
+
+
   // Starts loading the dictionaries on a background thread so that the first
   // keystroke does not stall for the multi-second synchronous load.  Loads
   // exactly once per process (std::call_once underneath); a later
@@ -102,10 +129,6 @@ class MeltypeBridge {
   // readable) for the prefix test below.  Keeping the two in sync is what makes
   // "Meltype called this English" and "this is a finished word" agree.
   static bool IsEnglishWord(std::string_view lower);
-
-  // True when some word in that vocabulary starts with |lower| (|lower| itself
-  // counts).  False when the dictionaries are unavailable.
-  static bool IsEnglishWordPrefix(std::string_view lower);
 
   static std::once_flag init_flag_;
   static std::unique_ptr<mozkey::meltype::MeltypeDictionaries> dictionaries_;

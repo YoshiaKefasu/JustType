@@ -38,6 +38,7 @@ Docker
 Dotnet
 Duolingo
 Dutch
+e2e
 Eclipse
 Edge
 Edx
@@ -65,6 +66,7 @@ Google
 Graphql
 Greek
 Gtk
+h264
 Harvard
 Haskell
 Hebrew
@@ -80,6 +82,8 @@ Inkscape
 Instagram
 Intel
 Intellij
+ipv4
+ipv6
 Italian
 Japan
 Java
@@ -88,6 +92,7 @@ Jenkins
 Jetbrains
 Jira
 Jupyter
+k8s
 Kafka
 Khan
 Kindle
@@ -124,6 +129,7 @@ Opera
 Oracle
 Osaka
 Oxford
+p2p
 PHP
 Pandas
 Paypal
@@ -153,6 +159,7 @@ Sapporo
 Scala
 Scipy
 Sendai
+sha256
 Sketchup
 Skype
 Slack
@@ -193,6 +200,8 @@ Vlc
 Vmware
 Vscode
 Vue
+v1
+v2
 Vultr
 Webpack
 Whatsapp
@@ -217,3 +226,9 @@ WSL
  
 Xi
 IME
+Terraform
+NextJs
+TailwindCss
+OpenSearch
+Blog
+Vlog

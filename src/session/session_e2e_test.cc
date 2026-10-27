@@ -2129,6 +2129,16 @@ int main() {
          "小文字 gojiru は普通の日本語入力 (英語スイッチなし)"},
         {"douiushikumika", "どういうしくみか", "英語なしの対照ケース"},
         {"juubunseidoga", "じゅうぶんせいどが", "英語なしの対照ケース"},
+        // 複数形の 's' と後続の日本語の 's' の衝突 (Android + すまほ)。
+        // 英語辞書の Androids に引きずられず、英単語本体で切れること。
+        {"Androidsumahoapuri", "Androidすまほあぷり",
+         "複数形 s の衝突: Android + すまほ (空白なし)"},
+        {"Android sumahoapuri", "Android すまほあぷり",
+         "複数形 s の衝突: Android + すまほ (空白あり)"},
+        {"Discordsaba", "Discordさば", "複数形 s の衝突: Discord + さば"},
+        // 数字・記号を含む IT トークン。
+        {"S3baketto", "S3ばけっと", "識別子 S3 + ばけっと"},
+        {"C++gengo", "C++げんご", "識別子 C++ + げんご"},
     };
 
     for (const MixedCase& mixed : mixed_cases) {

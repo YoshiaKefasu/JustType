@@ -51,8 +51,19 @@ class WordList {
   // 登録した語の一覧 (読み込み時だけ使う。順序は不定)。
   std::vector<std::string> Words() const;
 
+  // |prefix| で始まる語を列挙する (|prefix| 自体が語のときも含む)。
+  // ソート済み索引を使うので O(log n + k)。索引未構築なら空を返す
+  // (誤って全走査で遅くならないようにするため、BuildIndex() を先に呼ぶこと)。
+  void CollectWordsWithPrefix(std::string_view prefix,
+                              std::vector<std::string_view>* out) const;
+
+  // 前方一致列挙用のソート済み索引を作る。辞書の読み込み完了後に 1 回呼ぶ。
+  // 構築後は追加した語は索引に反映されない点に注意 (読み込み専用の辞書向け)。
+  void BuildIndex();
+
   // 空白・タブ・カンマ区切りの語を読み込む。# 以降はコメント。
-  // 英小文字以外を含む語は無視する (大文字は小文字にしてから渡すこと)。
+  // 英小文字と数字以外を含む語は無視する (大文字は小文字にしてから渡すこと)。
+  // 数字を許すのは、IT の略語 (k8s, e2e, ipv4) を辞書に載せるため。
   // 戻り値は追加できた語数。
   std::size_t AddText(std::string_view text);
 
@@ -73,6 +84,8 @@ class WordList {
   std::deque<std::string> blocks_;
   std::unordered_set<std::string_view> words_;
   std::unordered_set<std::string_view> prefixes_;
+  // BuildIndex() が作る、語のソート済み索引 (string_view は blocks_ を指す)。
+  std::vector<std::string_view> sorted_;
 };
 
 }  // namespace meltype

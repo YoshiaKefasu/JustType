@@ -3,6 +3,7 @@
 
 #include "meltype/word_list.h"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
@@ -57,16 +58,17 @@ std::size_t WordList::AddText(std::string_view text) {
       std::size_t offset = line_begin + token_begin;
       std::size_t length = token_end - token_begin;
       token_begin = token_end;
-      // 英小文字以外を含む語は無視する (大文字は小文字にしてから渡すこと)。
-      bool only_lower = true;
+      // 英小文字と数字以外を含む語は無視する (大文字は小文字にしてから渡すこと)。
+      // 数字を許すのは、IT の略語 (k8s, e2e, ipv4) を辞書に載せるため。
+      bool lower_or_digit = true;
       for (std::size_t i = 0; i < length; ++i) {
         char c = block[offset + i];
-        if (c < 'a' || c > 'z') {
-          only_lower = false;
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) {
+          lower_or_digit = false;
           break;
         }
       }
-      if (!only_lower) continue;
+      if (!lower_or_digit) continue;
       if (AddWordOwned(block, offset, length)) ++added;
     }
     if (line_end == block.size()) break;
@@ -96,6 +98,22 @@ std::vector<std::string> WordList::Words() const {
   out.reserve(words_.size());
   for (std::string_view word : words_) out.emplace_back(word);
   return out;
+}
+
+void WordList::BuildIndex() {
+  sorted_.assign(words_.begin(), words_.end());
+  std::sort(sorted_.begin(), sorted_.end());
+}
+
+void WordList::CollectWordsWithPrefix(
+    const std::string_view prefix, std::vector<std::string_view>* out) const {
+  if (out == nullptr) return;
+  out->clear();
+  if (sorted_.empty()) return;  // 索引未構築 (BuildIndex() を呼んでいない)
+  auto it = std::lower_bound(sorted_.begin(), sorted_.end(), prefix);
+  for (; it != sorted_.end() && it->starts_with(prefix); ++it) {
+    out->push_back(*it);
+  }
 }
 
 }  // namespace meltype

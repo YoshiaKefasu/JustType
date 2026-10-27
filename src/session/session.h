@@ -906,6 +906,16 @@ class Session {
   // user-chosen alphanumeric mode (Eisu) has no composition to protect.
   void EndTemporaryShiftAsciiRunIfWordEnded(const commands::KeyEvent& key_event);
 
+  // Ends Mozc's temporary Shift+letter ASCII mode when the composition ends
+  // with an English word and a space is about to be inserted.
+  //
+  // The space itself is a hard boundary: no English word contains one, so the
+  // word before it is finished and whatever comes next is Japanese.  Putting the
+  // composer back into the user's real mode here means the next letter is
+  // transliterated from the first keystroke instead of being inserted as raw
+  // ASCII and then needing a late correction.
+  void EndTemporaryShiftAsciiRunBeforeSpace();
+
   // Handles KeyEvent::activated to support indirect IME on/off.
   bool HandleIndirectImeOnOff(mozc::commands::Command* command);
 

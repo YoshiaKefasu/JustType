@@ -5060,6 +5060,7 @@ bool Session::InsertSpaceHalfWidth(commands::Command* command) {
   if (has_mode) {
     key_event->set_mode(mode);
   }
+  EndTemporaryShiftAsciiRunBeforeSpace();
   return InsertCharacter(command);
 }
 
@@ -5088,6 +5089,7 @@ bool Session::InsertSpaceFullWidth(commands::Command* command) {
   if (has_mode) {
     key_event->set_mode(mode);
   }
+  EndTemporaryShiftAsciiRunBeforeSpace();
   return InsertCharacter(command);
 }
 
@@ -7822,14 +7824,58 @@ void Session::EndTemporaryShiftAsciiRunIfWordEnded(
   if (raw.empty()) return;
   if (!MeltypeBridge::EndsTemporaryShiftAsciiRun(raw, letter)) return;
 
+  composer::Composer* composer = context_->mutable_composer();
+
+  // Some of the Japanese syllable was already inserted as raw ASCII before the
+  // boundary could be known.  "Android" + "s" is Android + す, but "Androids"
+  // is also an English plural, so the boundary only becomes visible on the
+  // "u" that follows — by then the "s" is already in the composition as ASCII.
+  // Erase that tail and re-insert it in Hiragana; the letter being typed now is
+  // not in the composition yet and will be transliterated normally.
+  const std::size_t rewrite =
+      MeltypeBridge::JapaneseTailLength(raw, letter);
+  if (rewrite > 0 && rewrite <= raw.size() &&
+      composer->GetCursor() == composer->GetLength()) {
+    const std::string tail = raw.substr(raw.size() - rewrite);
+    // Composition positions count characters, and these are all ASCII letters,
+    // so deriving the start from GetLength() is safe either way.
+    composer->DeleteRange(composer->GetLength() - rewrite, rewrite);
+    composer->ResetInputMode();
+    for (const char c : tail) {
+      composer->InsertCharacter(std::string(1, c));
+    }
+    TraceStep("Composer",
+              absl::StrCat("end temporary ASCII before \"", TraceText(input),
+                           "\" and re-read \"", TraceText(tail),
+                           "\" as Japanese"));
+    return;
+  }
+
   // Back to the user's real mode.  ResetInputMode() is Mozc's own "leave the
   // temporary Shift+letter mode" operation — it restores comeback_input_mode_
   // and resets the shifted-sequence counters, so the next Shift+letter starts a
   // fresh English word.
-  context_->mutable_composer()->ResetInputMode();
+  composer->ResetInputMode();
   TraceStep("Composer",
             absl::StrCat("end temporary ASCII before \"", TraceText(input),
                          "\" (Meltype: the English word ended)"));
+}
+
+void Session::EndTemporaryShiftAsciiRunBeforeSpace() {
+  if (!IsTemporaryShiftAsciiInputMode()) return;
+  if (context_->GetConfig().shift_key_mode_switch() !=
+      config::Config::ASCII_INPUT_MODE) {
+    return;
+  }
+  // Only when the composition as it stands ends with an English piece.  A
+  // trailing Japanese word must not be disturbed, and a Japanese word that
+  // merely contains letters ("あのGithubの") ends with a Japanese piece, so this
+  // asks Meltype about the text as typed rather than guessing from the mode.
+  if (!CompositionEndsWithEnglishPiece()) return;
+
+  context_->mutable_composer()->ResetInputMode();
+  TraceStep("Composer",
+            "end temporary ASCII at a space after an English word");
 }
 
 bool Session::CompositionMixesJapaneseAndEnglish(absl::string_view extra) const {

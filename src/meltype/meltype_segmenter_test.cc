@@ -358,6 +358,34 @@ int main() {
   Expect("ex + に", "exni", Final(), "EN:ex|JA:に");
   Expect("ox + に", "oxni", Final(), "EN:ox|JA:に");
 
+  std::cout << "\n[11] ドット付きのファイル名と、数字を含む IT の略語\n";
+  // 拡張子が既知なら 1 語の英語。後ろに日本語が続いても、拡張子の部分が
+  // ひらがなに化けない (file.exe → ふぃれ.えぇえ にしない)。
+  Expect("file.exe を", "file.exewo", Final(), "EN:file.exe|JA:を");
+  Expect("setup.bat を実行", "setup.batwosikkou", Final(), "EN:setup.bat|JA:をしっこう");
+  Expect("main.log に", "main.logni", Final(), "EN:main.log|JA:に");
+  Expect("data.csv を", "data.csvwo", Final(), "EN:data.csv|JA:を");
+  Expect("image.png を", "image.pngwo", Final(), "EN:image.png|JA:を");
+  Expect("document.zip を", "document.zipwo", Final(), "EN:document.zip|JA:を");
+  Expect("node.js を", "node.jswo", Final(), "EN:node.js|JA:を");
+  // 知らない拡張子は英語の根拠にしない (Next.jsd の d は日本語の頭のまま)。
+  Expect("知らない拡張子は英語にしない", "Next.jsd", Final(), "EN:Next.js|JA:d");
+  // 数字を含む略語は、辞書 (propernouns.txt) に載っているものだけ英語にする。
+  Expect("k8s を", "k8swo", Final(), "EN:k8s|JA:を");
+  Expect("e2e の", "e2eno", Final(), "EN:e2e|JA:の");
+  Expect("sha256 で", "sha256de", Final(), "EN:sha256|JA:で");
+  Expect("ipv4 で", "ipv4de", Final(), "EN:ipv4|JA:で");
+  Expect("v2 に", "v2ni", Final(), "EN:v2|JA:に");
+  // 辞書に無い数字混じりの綴りは英語にしない (数字は読めないのでそのまま残る)。
+  Expect("辞書に無い x99 は英語にしない", "x99ni", Final(), "JA:x99に");
+  // 辞書の読み込みは数字を含む語も受け付ける (k8s, ipv4 を載せるため)。
+  {
+    mozkey::meltype::WordList list;
+    Check(list.AddText("k8s e2e ipv4 # コメント\n") == 3 && list.ContainsWord("k8s") &&
+              list.HasPrefix("k8") && !list.ContainsWord("k8x"),
+          "WordList: 数字を含む語を読み込む");
+  }
+
   RomajiDetectorTests();
 
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"

@@ -162,6 +162,14 @@ bool IsAsciiLetter(const char c) {
 // True when |c| is an uppercase ASCII letter.
 bool IsUpperAscii(const char c) { return 'A' <= c && c <= 'Z'; }
 
+// True when |c| can be part of an English run the user is typing: letters plus
+// the digits and punctuation that product names use (S3, N+1, C++, Next.js).
+bool IsWordChar(const char c) {
+  if (IsAsciiLetter(c)) return true;
+  if ('0' <= c && c <= '9') return true;
+  return c == '+' || c == '#' || c == '.' || c == '_' || c == '-';
+}
+
 std::string ToLowerAscii(std::string_view text) {
   std::string lower(text);
   for (char& c : lower) {
@@ -170,16 +178,23 @@ std::string ToLowerAscii(std::string_view text) {
   return lower;
 }
 
-// The word a Shift+letter run is building: the trailing run of ASCII letters,
-// cut at the last lowercase->uppercase transition, which is the CamelCase word
-// boundary.  "anoGithub" -> "Github", "anoGithub Cli" -> "Cli", and
-// "anoAPI" -> "API" — cutting at the last capital letter instead would turn
-// "API" into "I" and lose the acronym.
+// The English run the user is typing, taken from the END of |text|.
+//
+// The run is the trailing sequence of word characters, cut at the last
+// lowercase->uppercase transition (the CamelCase boundary): "anoGithub" ->
+// "Github", "anoGithub Cli" -> "Cli", "anoAPI" -> "API".  Cutting at the last
+// capital instead would turn "API" into "I" and lose the acronym.
+//
+// The scan skips a trailing separator, so "Android " and "API " still yield the
+// word before the space.  That matters because the boundary decision is made on
+// the keystroke *after* the space, when the composition ends with it: without
+// skipping it the run would be empty and the caller could never end the ASCII
+// run, which is the "space makes everything stay romaji" failure.
 std::string ShiftedWord(const std::string_view text) {
   std::size_t end = text.size();
-  while (end > 0 && !IsAsciiLetter(text[end - 1])) --end;
+  while (end > 0 && !IsWordChar(text[end - 1])) --end;
   std::size_t begin = end;
-  while (begin > 0 && IsAsciiLetter(text[begin - 1])) --begin;
+  while (begin > 0 && IsWordChar(text[begin - 1])) --begin;
   std::size_t word_begin = begin;
   for (std::size_t i = begin + 1; i < end; ++i) {
     if (IsLowerAscii(text[i - 1]) && IsUpperAscii(text[i])) word_begin = i;
@@ -197,33 +212,6 @@ bool IsAcronym(const std::string_view raw) {
   return true;
 }
 
-// True when |c| can begin a Japanese particle or verb inflection, i.e. the
-// letter that follows an English noun in Japanese: を wo, に ni, で de, が ga,
-// は ha, と to, から kara, まで made, の no, も mo, わ wa, へ he, や ya, より
-// yori, する/して/した suru/shite/shita, だ/です da/desu.
-//
-// f, b, p, v, l, c, j, z and q are deliberately absent.  They only open ふぁ・
-// ば・ぱ・ゔぁ・ぁ・ちゃ style syllables, which no particle or inflection starts
-// with, and they are exactly the letters that appear mid-way through common
-// English words ("Terra|f|orm", "Ansi|b|le").
-bool StartsJapaneseParticle(const char c) {
-  switch (c) {
-    case 'd':
-    case 'g':
-    case 'h':
-    case 'k':
-    case 'm':
-    case 'n':
-    case 's':
-    case 't':
-    case 'w':
-    case 'y':
-      return true;
-    default:
-      return false;
-  }
-}
-
 }  // namespace
 
 // The bundled vocabulary.  Both are answered from the same word lists
@@ -237,34 +225,70 @@ bool MeltypeBridge::IsEnglishWord(const std::string_view lower) {
          dictionaries_->readable.ContainsWord(lower);
 }
 
-bool MeltypeBridge::IsEnglishWordPrefix(const std::string_view lower) {
+bool MeltypeBridge::HasNonCompoundContinuation(const std::string_view prefix,
+                                              const std::string_view stem) {
   if (GetSegmenter() == nullptr) return false;
-  return dictionaries_->english.HasPrefix(lower) ||
-         dictionaries_->proper.HasPrefix(lower) ||
-         dictionaries_->spell.HasPrefix(lower) ||
-         dictionaries_->readable.HasPrefix(lower);
+  std::vector<std::string_view> candidates;
+  for (const mozkey::meltype::WordList* list :
+       {&dictionaries_->english, &dictionaries_->proper,
+        &dictionaries_->spell, &dictionaries_->readable}) {
+    list->CollectWordsWithPrefix(prefix, &candidates);
+    for (const std::string_view candidate : candidates) {
+      if (candidate.size() <= stem.size()) continue;
+      if (stem != candidate.substr(0, stem.size())) continue;
+      // The part after the finished word decides: if it is not itself a word,
+      // this spelling is a longer word the user may still be typing, not a
+      // compound of the word already on screen.
+      //
+      // Two-letter remainders ("s", "es", "ed", "ly", "er") are not treated as
+      // compounds: they are the ordinary inflections, and reading
+      // "adjustor" + "es" as a compound would cut "adjustores" in half.  A real
+      // compound's second half is a word in its own right ("handed", "hood",
+      // "some").
+      const std::string_view rest = candidate.substr(stem.size());
+      if (rest.size() < 3) return true;
+      if (!IsEnglishWord(rest)) return true;
+    }
+  }
+  return false;
 }
 
 bool MeltypeBridge::EndsTemporaryShiftAsciiRun(const std::string_view raw,
                                                const char letter) {
+  // Every lowercase letter can start Japanese.  Earlier revisions only allowed
+  // the ten consonants that open a particle, which silently dropped the rest:
+  // ら行 (r), ば行 (b), ぱ行 (p), ざ行 (z), ちゃ行 (c) and every vowel.  Those
+  // are ordinary sentence starts ("Android" + "sumaho" needs no gate at all
+  // once the word is finished), so the letter set is no longer a filter; the
+  // word tests below are.
   if (!IsLowerAscii(letter)) return false;
-  // Only a letter that can open a Japanese particle or inflection can end the
-  // English word.  Everything else is still that word being typed.
-  if (!StartsJapaneseParticle(letter)) return false;
 
   const mozkey::meltype::ScoredSegmenter* segmenter = GetSegmenter();
   if (segmenter == nullptr) return false;  // no dictionaries: no opinion
 
-  // A long composition has no Shift+letter run worth asking about, and
-  // SegmentRomaji() runs a dynamic program over the whole buffer, so skip
-  // before paying for it.  The limit is far beyond any single word.
-  constexpr std::size_t kMaxRunLength = 64;
-  if (raw.size() > kMaxRunLength) return false;
+  // A separator immediately before the letter means the English word is
+  // already finished: "Android " + "s" is Android + すまほ, not "Androids".
+  // Without this the run taken from the composition is empty and the caller
+  // could never leave ASCII mode, which left whole sentences as raw romaji.
+  if (!raw.empty() && !IsWordChar(raw.back())) return true;
 
-  // Ask Meltype about the composition as it will be *after* this letter.  The
-  // answer is the boundary itself: an English piece followed by a Japanese
-  // piece.  While the English word continues Meltype keeps one English piece
-  // and this is false, so "Cli" + "e" (-> "Client") stays ASCII.
+  // The run the user is typing, WITHOUT the letter just pressed.  It is taken
+  // from the composition, so it is only bounded by the run itself and never by
+  // the length of the sentence typed before it (an earlier revision gave up on
+  // any composition longer than 64 characters, which made a long Japanese
+  // sentence followed by English unrecoverable).
+  const std::string run = ShiftedWord(raw);
+  if (run.empty()) return true;
+  constexpr std::size_t kMaxRunLength = 64;
+  if (run.size() > kMaxRunLength) return false;
+
+  const std::string stem = ToLowerAscii(run);
+  const std::string word = stem + letter;
+
+  // Ask Meltype about the composition as it will be *after* this letter.  A
+  // boundary is required: while an English word continues Meltype keeps one
+  // English piece, so "Cli" + "e" (-> "Client") stays ASCII, and "Ab" + "a"
+  // (-> "Aba") does too, which is what keeps ordinary English words whole.
   std::string text(raw);
   text.push_back(letter);
   mozkey::meltype::ScoredSegmenter::Options options;
@@ -277,56 +301,68 @@ bool MeltypeBridge::EndsTemporaryShiftAsciiRun(const std::string_view raw,
       pieces[pieces.size() - 2];
   if (!english.is_english) return false;
 
-  // The word is the whole run the user typed since the last Shift+letter, not
-  // whatever fragment Meltype happened to close.  Meltype also closes a prefix
-  // of an unknown word — "Fatiguesome" becomes [EN:Fatigue][JA:som] and
-  // "Contracting" becomes [EN:Contract][JA:in] — and those fragments are real
-  // words, so trusting the piece alone fires in the middle of 8% of English
-  // words.  Asking about the run keeps the word the user is actually typing.
-  //
-  // Measured on the bundled dictionaries (20,000 English words typed after
-  // "ano"): judging by the closed piece alone gives 1,518 / 20,000 mid-word
-  // false reverts (7.59%) and lowers particle recall to 90.3%; judging by the
-  // whole run gives 0 / 20,000 (0.00%) and 98.3%.  The piece is still used, but
-  // only as the acronym evidence below, where it cannot be a fragment.
-  const std::string raw_word = ShiftedWord(text);
-  if (raw_word.size() < 2) return false;
-  const std::string word = ToLowerAscii(raw_word);
-  const std::string raw_stem = raw_word.substr(0, raw_word.size() - 1);
-  const std::string stem = ToLowerAscii(raw_stem);
-
   // The word has to be finished.  Either it is a dictionary entry, or it is an
   // acronym that Meltype itself named as exactly this run (API, GPU, WSL);
   // acronyms are never in the word lists but Meltype still calls them English.
   const bool dictionary_word = IsEnglishWord(stem);
   const bool meltype_acronym =
-      IsAcronym(raw_stem) && ToLowerAscii(english.raw) == stem;
-  if (!dictionary_word && !meltype_acronym) return false;
+      IsAcronym(run) && ToLowerAscii(english.raw) == stem;
+  // 識別子 (S3, C++, N+1, node.js) は辞書に載らず頭字語でもないが、
+  // Meltype が英語の区間として確定させているならそのまま信頼する。
+  const bool identifier =
+      mozkey::meltype::IsIdentifierToken(run) &&
+      ToLowerAscii(english.raw) == ToLowerAscii(run);
+  if (!dictionary_word && !meltype_acronym && !identifier) return false;
 
-  // The run ends exactly where it stops being a word.  Gate 9 established that
-  // the stem (the run without the letter just typed) is a finished English
-  // word or a recognised acronym, so the only question left is whether the run
-  // including this letter is *also* a word:
+  // The run ends where it stops being a word.  Both questions have to be asked:
   //
-  //   "Clou" + "d" -> stem "clou" is a word and "cloud" is a word as well, so
-  //                    the user is still typing "Cloud" -> keep ASCII.
-  //   "Cli"  + "n" -> "clin" is a word (Clinic follows) -> keep ASCII.
-  //   "One"  + "h" -> "oneh" is not a word, so "One" is finished and は began.
-  //   "Github" + "w" -> "githubw" is not a word -> を began.
-  //   "Todo" + "n" -> "todon" is not a word -> に began.
+  //   "cloud"  is a word               -> still typing Cloud   -> keep ASCII
+  //   "aa"     is not a word, but      -> still typing Abandon -> keep ASCII
+  //            "aardvark" continues it
+  //   "oneh"   is not a word, and its  -> One is finished, は began -> end
+  //            continuations are only
+  //            compounds (one+handed)
+  //   "githubw" is not a word at all   -> を began             -> end
   //
-  // A bare prefix test cannot express this.  "oneh" is the prefix of
-  // "onehanded"/"onehood"/"onehow", so a prefix test keeps the ASCII run alive
-  // for ever and the rest of the sentence comes out as romaji: measured on
-  // "sisutemuOnehanndanngata", which stayed "Onehaんだんがた".  Comparing whole
-  // words instead keeps every spelling that is genuinely a word intact.
-  //
-  // Known limit: a finished word followed by a particle consonant is
-  // indistinguishable from a word still being typed at this instant ("Bash"+
-  // "s" is also how "Bashs" starts), so such a pair is read as Japanese and
-  // the consonant may come out as a full-width letter.  Erring the other way
-  // was measured at 7.59% of all English words, so this is the safer side.
-  return !IsEnglishWord(word);
+  // Asking only "is it a word" (the previous rule) cut 22.7% of ordinary
+  // English words at the first letter that broke a word boundary ("Ab" of
+  // "Abandon").  Asking only "is it a prefix" never ended the run after "One",
+  // because "oneh" prefixes "onehanded".  The compound test separates the two:
+  // a continuation that is merely this word plus another word is not a word the
+  // user is still typing.
+  if (IsEnglishWord(word)) return false;
+  if (HasNonCompoundContinuation(word, stem)) return false;
+  return true;
+}
+
+std::size_t MeltypeBridge::JapaneseTailLength(const std::string_view raw,
+                                             const char letter) {
+  const mozkey::meltype::ScoredSegmenter* segmenter = GetSegmenter();
+  if (segmenter == nullptr) return 0;
+  if (raw.empty() || !IsLowerAscii(letter)) return 0;
+
+  std::string text(raw);
+  text.push_back(letter);
+  mozkey::meltype::ScoredSegmenter::Options options;
+  options.final = false;
+  const std::vector<mozkey::meltype::ScoredSegmenter::Segment> pieces =
+      segmenter->SegmentInput(text, options);
+  if (pieces.size() < 2 || pieces.back().is_english) return 0;
+
+  // The last piece is the Japanese that follows the English word.  Only the
+  // part of it that is already inside |raw| has to be rewritten: |letter| has
+  // not been inserted yet, so it will be typed in Hiragana once the mode is
+  // back.
+  std::size_t japanese_begin = text.size();
+  for (std::size_t i = pieces.size(); i > 0; --i) {
+    const mozkey::meltype::ScoredSegmenter::Segment& piece = pieces[i - 1];
+    if (piece.raw.empty()) break;
+    if (piece.is_english) break;  // the Japanese tail starts after this piece
+    if (japanese_begin < piece.raw.size()) break;
+    japanese_begin -= piece.raw.size();
+  }
+  if (japanese_begin >= raw.size()) return 0;  // nothing typed yet
+  return raw.size() - japanese_begin;
 }
 
 }  // namespace session
