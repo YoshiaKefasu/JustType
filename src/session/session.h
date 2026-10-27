@@ -287,6 +287,19 @@ class Session {
   // For unittest only
   mozc::composer::Composer* get_internal_composer_only_for_unittest();
 
+  // Replaces a passive suggestion window with a single display-only preview
+  // of the Meltype-protected value when |display_rewritten| is true (Mozc's
+  // own candidates were generated from a reading the user never typed: typing
+  // "discordde" in kana mode makes Mozc read ぢsこrっで while the preedit shows
+  // "discord で").  The replacement candidate carries no id, so the renderer
+  // never turns it into a click that would commit the raw reading.  Returns
+  // true when the window was replaced; |output| is untouched otherwise.
+  // Public because the live-conversion output path and the E2E test both use
+  // it directly.
+  static bool SyncPassiveSuggestionWithMeltypeDisplay(
+      bool display_rewritten, const std::string& display_value,
+      commands::Output* output);
+
   const ImeContext& context() const;
 
  private:
@@ -521,6 +534,16 @@ class Session {
   // (whose segments would restore the un-protected surface); otherwise the
   // ordinary commit keeps its learning and undo semantics.
   bool meltype_display_protected_ = false;
+
+  // True when that protection replaced the value Mozc converted with the
+  // typed Latin letters: typing "discordde" in kana mode makes Mozc read
+  // ぢsこrっで and Meltype shows "discord で".  The passive suggestion window
+  // is generated from Mozc's own reading, so in that case its candidates
+  // spell a reading the user never typed (ぢsこrっで in the bubble while the
+  // preedit shows the letters) and must be replaced by the protected value.
+  bool meltype_display_rewritten_ = false;
+  // The protected preedit value the suggestion window is synced to.
+  std::string meltype_display_value_;
 
   // Per-keystroke pipeline trace; see TraceLogger.  trace_seq_ == 0 means no
   // sequence is active and every helper is a no-op.  A sequence spans the

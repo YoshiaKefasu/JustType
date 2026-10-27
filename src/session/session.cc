@@ -5662,6 +5662,8 @@ bool Session::RebuildMeltypePiecePlan(const std::string& raw, bool final) {
 bool Session::ApplyMeltypePiecePreedit(const std::string& raw, bool final,
                                        commands::Preedit* preedit) {
   meltype_display_protected_ = false;
+  meltype_display_rewritten_ = false;
+  meltype_display_value_.clear();
   if (preedit == nullptr || raw.empty()) return false;
   if (preedit->segment_size() == 0) return false;
   if (!RebuildMeltypePiecePlan(raw, final)) return false;
@@ -5733,6 +5735,19 @@ bool Session::ApplyMeltypePiecePreedit(const std::string& raw, bool final,
     protected_value += segment.value;
   }
   preedit->set_cursor(static_cast<int>(Util::CharsLen(protected_value)));
+
+  // Whether the letters on screen are letters Mozc did not produce itself:
+  // "discordde" typed in kana mode converts to ぢsこrっで, and the protection
+  // above is what turns that into "discord で".  The passive suggestion
+  // window is built from Mozc's reading, so it has to be resynced in exactly
+  // that case (and only then: shift-typed ASCII already converts to itself,
+  // so Mozc's own suggestions stay usable).
+  std::string baseline_value;
+  for (const PieceSegment& segment : mozc_segments) {
+    baseline_value += segment.value;
+  }
+  meltype_display_value_ = protected_value;
+  meltype_display_rewritten_ = protected_value != baseline_value;
 
   meltype_display_protected_ = true;
   return true;
@@ -6231,6 +6246,8 @@ bool Session::AttachPassiveSuggestionSnapshot(
   }
 
   *output->mutable_candidate_window() = snapshot->candidate_window;
+  SyncPassiveSuggestionWithMeltypeDisplay(
+      meltype_display_rewritten_, meltype_display_value_, output);
   return true;
 }
 
@@ -6345,6 +6362,38 @@ bool Session::FocusHeldPassiveSuggestion(commands::Command* command) {
   return true;
 }
 
+bool Session::SyncPassiveSuggestionWithMeltypeDisplay(
+    bool display_rewritten, const std::string& display_value,
+    commands::Output* output) {
+  DCHECK(output);
+  if (!display_rewritten || display_value.empty()) return false;
+  if (!output->has_candidate_window()) return false;
+  if (output->candidate_window().category() != commands::SUGGESTION) {
+    return false;
+  }
+  // Already the preview (the window may be attached twice on one path).
+  if (output->candidate_window().candidate_size() == 1 &&
+      !output->candidate_window().candidate(0).has_id() &&
+      output->candidate_window().candidate(0).value() == display_value) {
+    return false;
+  }
+
+  // The window's candidates are spelled from Mozc's reading of the
+  // composition (ぢsこrっで), which is not what the preedit shows once Meltype
+  // protected the English piece (discord で).  Keep the window but show the
+  // value Enter will commit: one candidate, no id — a passive suggestion is
+  // only clicked through its id, so this preview can never commit the raw
+  // reading that is no longer on screen.
+  commands::CandidateWindow* window = output->mutable_candidate_window();
+  window->clear_candidate();
+  window->set_size(1);
+  window->clear_focused_index();
+  commands::CandidateWindow::Candidate* candidate = window->add_candidate();
+  candidate->set_index(0);
+  candidate->set_value(display_value);
+  return true;
+}
+
 bool Session::AttachLiveConversionSuggestionCandidateWindow(
     const commands::Input& input, commands::Output* output) {
   DCHECK(output);
@@ -6424,6 +6473,8 @@ bool Session::AttachLiveConversionSuggestionCandidateWindow(
           .GetQueryForPrediction();
   *output->mutable_candidate_window() =
       live_conversion_suggestion_candidate_window_;
+  SyncPassiveSuggestionWithMeltypeDisplay(
+      meltype_display_rewritten_, meltype_display_value_, output);
   return true;
 }
 
@@ -6505,6 +6556,8 @@ bool Session::AttachCachedLiveConversionSuggestionCandidateWindow(
   }
 
   *output->mutable_candidate_window() = *candidate_window;
+  SyncPassiveSuggestionWithMeltypeDisplay(
+      meltype_display_rewritten_, meltype_display_value_, output);
   return true;
 }
 

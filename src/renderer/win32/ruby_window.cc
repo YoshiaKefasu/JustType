@@ -206,6 +206,16 @@ int RectCenterX(const RECT& rect) { return (rect.left + rect.right) / 2; }
 
 int RectCenterY(const RECT& rect) { return (rect.top + rect.bottom) / 2; }
 
+// True when |text| holds at least one ASCII letter.  Used to recognise the
+// protected English pieces in a preedit: their surface is the typed letters
+// ("discord"), and that is the honest reading to show in the ruby overlay.
+bool ContainsAsciiLetter(const std::string& text) {
+  for (const char c : text) {
+    if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')) return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 RubyWindow::RubyWindow() = default;
@@ -290,7 +300,14 @@ bool RubyWindow::BuildReadingText(
 
     value.append(segment.value());
 
-    if (segment.has_key() && !segment.key().empty()) {
+    // A protected English piece carries the typed letters in |value| ("discord")
+    // while its |key| is whatever the composer read there, which for a word
+    // typed in kana mode is raw romaji ("ぢsこrっで").  Showing that key in the
+    // ruby overlay is the reported bug: the preedit above reads "discordで" and
+    // the bubble under it read "ぢsこrっで".  The letters are the honest reading
+    // for that span, so prefer them whenever the value holds any.
+    if (segment.has_key() && !segment.key().empty() &&
+        !ContainsAsciiLetter(segment.value())) {
       reading->append(segment.key());
     } else {
       reading->append(segment.value());

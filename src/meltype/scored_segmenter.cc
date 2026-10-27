@@ -1226,6 +1226,20 @@ std::vector<Segment> Context::Run() {
             syllable_length_[static_cast<std::size_t>(j) - 1] >= 2) {
           continue;
         }
+        // 打ちかけの「s」+「h」(し の 1 音目) も同じ扱い。まだ 1 音になって
+        // いないので上の判定 (syllable_readable_) は効かず、'h' を押した瞬間だけ
+        // DP が複数形の 's' を英語側に残す (Clonesh -> Clones|h)。そこを英語と
+        // して確定させると、画面は Clones のまま「ひた」が続いて Clonesひた に
+        // なる。's' を日本語の頭に譲れば、境界の判定 (meltype_bridge) が 's' を
+        // ひらがなで入れ直して Clone した になる。
+        // 全体が英単語 (...sh で終わる cash, push) のときは、この 1 文字手前で
+        // 切る区間を却下しても、'h' まで含む区間が別に候補として残るので
+        // 英語のまま変わらない。
+        if (j - i >= 3 && j == n_ - 1 &&
+            input_[static_cast<std::size_t>(j) - 1] == 's' &&
+            input_[static_cast<std::size_t>(j)] == 'h') {
+          continue;
+        }
         if (!IsEnglishSpan(Sub(i, j),
                            at_end, before, after, /*start_of_input=*/i == 0,
                            /*unreadable=*/HasUnreadable(i, j), next,

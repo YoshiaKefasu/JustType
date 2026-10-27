@@ -574,6 +574,109 @@ int main() {
     }
     ReportEq("stopshita の区間分け", "EN:stop|JA:した", rendered);
   }
+  // [回帰検証] 英単語の複数形 's' と、サ変活用の頭の し の打ちかけ ('s' + 'h')
+  // は同じ綴りになる。1 音がまだ完成していない打鍵の途中で 's' を英語側に
+  // 残すと、画面は Clones のまま「ひた」が続いて Clonesひた になる。
+  // (実打鍵の検証は [8] の Session 実配線側で行う。ここは分割そのもの。)
+  for (const auto& [romaji, expected] :
+       std::vector<std::pair<std::string, std::string>>{
+           {"Cloneshita", "EN:Clone|JA:した"},
+           {"Stopshita", "EN:Stop|JA:した"},
+           {"Mergeshita", "EN:Merge|JA:した"},
+           {"Releaseshita", "EN:Release|JA:した"},
+           // 小文字だけで打った一言の英単語 + 助詞。's' 終わりの英語 (Clones)
+           // と複数形の 's' を混同しないこと。
+           {"discordde", "EN:discord|JA:で"},
+           {"Slacksaba", "EN:Slack|JA:さば"},
+           // 逆側の回帰: 全体が英単語 (...sh) のときは英語のまま。
+           {"cash", "EN:cash"},
+           {"push", "EN:push"},
+       }) {
+    const std::vector<ScoredSegmenter::Segment> spans =
+        segmenter.SegmentInput(romaji, ScoredSegmenter::Options{});
+    std::string rendered;
+    for (const auto& span : spans) {
+      if (!rendered.empty()) rendered += "|";
+      rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    ReportEq(romaji + " の区間分け", expected, rendered);
+  }
+  // [回帰検証] サジェスト窓 (フキダシ) は Mozc の読みから作られる。小文字だけで
+  // 打った英単語は Mozc の側では ぢsこrっで なので、そのままだとプレディットが
+  // discordで でもフキダシだけ生読みのままになる。保護で表示を作り変えた
+  // ときは、これから Enter で確定する値 1 つだけの窓に差し替える。
+  {
+    mozc::commands::Output output;
+    mozc::commands::CandidateWindow* window = output.mutable_candidate_window();
+    window->set_category(mozc::commands::SUGGESTION);
+    window->set_size(1);
+    window->set_position(0);
+    mozc::commands::CandidateWindow::Candidate* raw = window->add_candidate();
+    raw->set_index(0);
+    raw->set_value("ぢsこrっで");
+    raw->set_id(42);
+
+    const bool replaced = Session::SyncPassiveSuggestionWithMeltypeDisplay(
+        /*display_rewritten=*/true, "discordで", &output);
+    Report(replaced, "サジェスト窓を保護結果に差し替える", "replaced=false");
+    ReportEq("サジェスト窓の第1候補", "discordで",
+             output.candidate_window().candidate_size() > 0
+                 ? output.candidate_window().candidate(0).value()
+                 : std::string("<なし>"));
+    Report(output.candidate_window().size() == 1,
+           "サジェスト窓の件数", std::to_string(output.candidate_window().size()));
+    Report(!output.candidate_window().candidate(0).has_id(),
+           "差し替えた候補はクリックできない (生読みの確定を防ぐ)",
+           "id が残っている");
+
+    // 2 回呼んでも同じ (経路によっては同じ窓を二度添付する)。
+    const bool replaced_again = Session::SyncPassiveSuggestionWithMeltypeDisplay(
+        /*display_rewritten=*/true, "discordで", &output);
+    Report(!replaced_again, "差し替えは冪等", "2 回目も差し替えた");
+    ReportEq("差し替え後の第1候補 (2 回目)", "discordで",
+             output.candidate_window().candidate(0).value());
+  }
+  {
+    // Shift で打った英数は Mozc の変換値がもともと英字なので、表示は
+    // 作り変えていない → Mozc の候補をそのまま使う。
+    mozc::commands::Output output;
+    mozc::commands::CandidateWindow* window = output.mutable_candidate_window();
+    window->set_category(mozc::commands::SUGGESTION);
+    window->set_size(1);
+    window->set_position(0);
+    mozc::commands::CandidateWindow::Candidate* candidate =
+        window->add_candidate();
+    candidate->set_index(0);
+    candidate->set_value("Google");
+    candidate->set_id(7);
+
+    const bool replaced = Session::SyncPassiveSuggestionWithMeltypeDisplay(
+        /*display_rewritten=*/false, "Google", &output);
+    Report(!replaced, "表示を作り変えていないときは触らない",
+           "差し替えてしまった");
+    ReportEq("元の候補のまま", "Google",
+             output.candidate_window().candidate(0).value());
+    Report(output.candidate_window().candidate(0).has_id(),
+           "元の候補の id は残る", "id が消えた");
+  }
+  {
+    // 変換候補の窓 (SUGGESTION ではない) には触らない。
+    mozc::commands::Output output;
+    mozc::commands::CandidateWindow* window = output.mutable_candidate_window();
+    window->set_category(mozc::commands::CONVERSION);
+    window->set_size(1);
+    window->set_position(0);
+    mozc::commands::CandidateWindow::Candidate* candidate =
+        window->add_candidate();
+    candidate->set_index(0);
+    candidate->set_value("ぢsこrっで");
+
+    const bool replaced = Session::SyncPassiveSuggestionWithMeltypeDisplay(
+        /*display_rewritten=*/true, "discordで", &output);
+    Report(!replaced, "変換候補の窓は触らない", "差し替えてしまった");
+    ReportEq("変換候補のまま", "ぢsこrっで",
+             output.candidate_window().candidate(0).value());
+  }
   // [修正検証] 辞書にある実在英単語と同じ綴りの日本語の助詞・形式名詞
   // (made=まで, demo=でも, tame=ため …) は、英単語の直後では英語同士の
   // 2 乗スコア合体をさせない (slackmade が全体英語に化けるのを防ぐ)。
@@ -932,9 +1035,9 @@ int main() {
           {{"さっき"}, {}, {"で調べた", "でしらべた"}},
           /*systemone=*/true,
           {"さっき", "で調べた"},
-          "さっき google で調べた",
+          "さっきgoogleで調べた",
           {"読み: さっき",
-           "左文脈: さっき google \n読み: でしらべた"},
+           "左文脈: さっきgoogle\n読み: でしらべた"},
           {{"さっき"}, {"で調べた", "でしらべた"}},
           "SystemOne ON: 各日本語ピースへ左文脈付きで問い合わせ",
       },
@@ -947,20 +1050,20 @@ int main() {
           {{"さっき"}, {}, {"で調べた", "でしらべた"}},
           /*systemone=*/false,
           {},
-          "さっき google で調べた",
+          "さっきgoogleで調べた",
           {},
           {},
           "SystemOne OFF: Mozc ベースライン + 英語保護のみで即時",
       },
-      // 英語が先頭: 文字列の端ではスペースを足さないので zenz パイプラン。
+      // 英語が先頭: 文字列の端ではスペースを足さないので zenzパイプラン。
       {
           "zenzpaipuran",
           {{"zenz", "ゼンツ"}, {"ぱいぷらん", "パイプラン"}},
           {{}, {"パイプラン", "ぱいぷらん"}},
           /*systemone=*/true,
           {"パイプラン"},
-          "zenz パイプラン",
-          {"左文脈: zenz \n読み: ぱいぷらん"},
+          "zenzパイプラン",
+          {"左文脈: zenz\n読み: ぱいぷらん"},
           {{"パイプラン", "ぱいぷらん"}},
           "SystemOne ON: 英語ピース直後の日本語ピース",
       },
@@ -970,7 +1073,7 @@ int main() {
           {{}, {"パイプラン", "ぱいぷらん"}},
           /*systemone=*/false,
           {},
-          "zenz パイプラン",
+          "zenzパイプラン",
           {},
           {},
           "SystemOne OFF: 英語が先頭でも同じ確定文字列",
@@ -984,7 +1087,7 @@ int main() {
           {{"きょうは"}, {}, {"で検索", "でけんさく"}},
           /*systemone=*/true,
           {"きょうは", "で検索"},
-          "きょうは google で検索",
+          "きょうはgoogleで検索",
           {},
           {},
           "英語区間の Mozc 変換結果 (グーグル) は英字に差し替えられる",
@@ -996,7 +1099,7 @@ int main() {
           {{}, {}, {}},
           /*systemone=*/false,
           {},
-          "今日は google で",
+          "今日はgoogleで",
           {},
           {},
           "Mozc 多文節ベースライン維持 + 英語ピンポイント保護",
@@ -1084,22 +1187,22 @@ int main() {
           {{"あの"}, {}, {}},
           /*systemone=*/true,
           {"あの"},
-          "あの facebook",
+          "あのfacebook",
           {"読み: あの"},
           {{"あの"}},
           "複数セグメントの英語ピース (facebook) をまとめて英字保護",
       },
-      // googleakaunnto: unn が英語化せず google アカウント になる
+      // googleakaunnto: unn が英語化せず googleアカウント になる
       {
           "googleakaunnto",
           {{"ごおglえ", "google"}, {"あかうんと", "アカウント"}},
           {{}, {"アカウント"}},
           /*systemone=*/false,
           {},
-          "google アカウント",
+          "googleアカウント",
           {},
           {},
-          "googleakaunnto: unn 誤爆防止で google アカウント",
+          "googleakaunnto: unn 誤爆防止で googleアカウント",
       },
       // oregafacebookakaunnto: facebook + アカウント
       {
@@ -1108,7 +1211,7 @@ int main() {
           {{"俺が"}, {}, {}, {"アカウント"}},
           /*systemone=*/false,
           {},
-          "俺が facebook アカウント",
+          "俺がfacebookアカウント",
           {},
           {},
           "oregafacebookakaunnto: facebook 複数セグメント + アカウント",
@@ -1120,10 +1223,10 @@ int main() {
           {{}, {"サーバ"}},
           /*systemone=*/false,
           {},
-          "discord サーバ",
+          "discordサーバ",
           {},
           {},
-          "discordsa-ba: discords 誤爆防止で discord サーバ",
+          "discordsa-ba: discords 誤爆防止で discordサーバ",
       },
 
       // reddit → れっぢ + t。SystemOne OFF でも英字保護だけは効く。
@@ -1133,7 +1236,7 @@ int main() {
           {{"さっき"}, {}, {}},
           /*systemone=*/false,
           {},
-          "さっき reddit",
+          "さっきreddit",
           {},
           {},
           "複数セグメントの英語ピース (reddit) + SystemOne OFF",
@@ -1146,7 +1249,7 @@ int main() {
           {{"明日は", "あしたは"}, {}},
           /*systemone=*/false,
           {},
-          "明日は google",
+          "明日はgoogle",
           {},
           {},
           "英語ピース境界を跨ぐセグメント (は+ごおgぇ) を事前スライス",
@@ -1161,8 +1264,8 @@ int main() {
           {{"さっき"}, {}, {"で調べた", "でしらべた"}},
           /*systemone=*/true,
           {"さっき", "で調べた"},
-          "さっき google で調べた",
-          {"読み: さっき", "左文脈: さっき google \n読み: でしらべた"},
+          "さっきgoogleで調べた",
+          {"読み: さっき", "左文脈: さっきgoogle\n読み: でしらべた"},
           {{"さっき"}, {"で調べた", "でしらべた"}},
           "助詞巻き込みのスライス + 英字保護 + SystemOne 畳み込み",
       },
@@ -1176,7 +1279,7 @@ int main() {
           {{}, {"した"}},
           /*systemone=*/false,
           {},
-          "stop した",
+          "stopした",
           {},
           {},
           "stopshita: stop(英語) + した(日本語) に分離",
@@ -1190,7 +1293,7 @@ int main() {
           {{}, {"っていう英語"}},
           /*systemone=*/true,
           {"っていう英語"},
-          "minute っていう英語",
+          "minuteっていう英語",
           {},
           {},
           "minutetteiuego: minute(英語) + っていう英語",
@@ -1204,7 +1307,7 @@ int main() {
           {{}, {"起動して", "起動"}},
           /*systemone=*/false,
           {},
-          "WSL から起動して",
+          "WSLから起動して",
           {},
           {},
           "WSLkarakidoushite: 頭字語 WSL が英字のまま保護される",
@@ -1215,7 +1318,7 @@ int main() {
           {{}, {"起動して", "起動"}},
           /*systemone=*/false,
           {},
-          "CPU から起動して",
+          "CPUから起動して",
           {},
           {},
           "CPUkarakidoushite: 頭字語 CPU が英字のまま保護される",
@@ -1226,7 +1329,7 @@ int main() {
           {{}, {"起動して", "起動"}},
           /*systemone=*/false,
           {},
-          "GPU から起動して",
+          "GPUから起動して",
           {},
           {},
           "GPUkarakidoushite: 頭字語 GPU が英字のまま保護される",
@@ -1237,7 +1340,7 @@ int main() {
           {{}, {"起動して", "起動"}},
           /*systemone=*/false,
           {},
-          "API から起動して",
+          "APIから起動して",
           {},
           {},
           "APIkarakidoushite: 頭字語 API が英字のまま保護される",
@@ -1273,7 +1376,7 @@ int main() {
       // Cliwotsukatte が半角英数のまま流し込まれていた (Github の後ろの
       // スペースで変換モードに入り、以降が全部ローマ字で残る)。
       // Meltype は空白を独立したピースとして切り出し、英語ピースの後ろの
-      // 境界スペースとして扱うので、画面も確定も「あの Github Cli を使って」
+      // 境界スペースとして扱うので、画面も確定も「あのGithub Cliを使って」
       // になる。
       {
           "anoGithub Cliwotsukatte",
@@ -1282,7 +1385,7 @@ int main() {
           {{"あの"}, {}, {}, {}, {"を使って"}},
           /*systemone=*/false,
           {},
-          "あの Github Cli を使って",
+          "あのGithub Cliを使って",
           {},
           {},
           "anoGithub Cliwotsukatte: スペースありでも英語ピースが保護される",
@@ -1296,7 +1399,7 @@ int main() {
           {{"あの"}, {}, {}, {"を使って"}},
           /*systemone=*/false,
           {},
-          "あの Github Cli を使って",
+          "あのGithub Cliを使って",
           {},
           {},
           "anoGithubCliwotsukatte: CamelCase 自動分離で同じ確定文字列",
@@ -1420,7 +1523,7 @@ int main() {
            "ログに日本語の読みが読める形で書かれている",
            "bytes=" + std::to_string(log.size()));
     // 左文脈は state の先頭。Logger は改行を空白に畳んで 1 行にしている。
-    Report(log.find("左文脈: さっき google") != std::string::npos,
+    Report(log.find("左文脈: さっきgoogle") != std::string::npos,
            "左文脈がログに残っている", "");
     Report(log.find("システム") != std::string::npos ||
                log.find("で調べた") != std::string::npos,
@@ -1964,6 +2067,13 @@ int main() {
         // であり、漢字化は実辞書を使う経路の責務。
         {"sorewoTodonikaite", "それをTodoにかいて",
          "Shift+大文字のあとも日本語入力に戻る (報告された _A ロック)"},
+        // 英単語の複数形 's' + サ変活用の頭の し ('s' + 'h')。打鍵の途中で
+        // 's' が英語側に残ると、画面は Clones のまま「ひた」が続いて
+        // Clonesひた になる (報告された不具合)。
+        {"Cloneshita", "Cloneした", "複数形 s + した (打鍵途中の sh)"},
+        {"Stopshita", "Stopした", "複数形 s + した (stop)"},
+        {"Mergeshita", "Mergeした", "複数形 s + した (merge)"},
+        {"Releaseshita", "Releaseした", "複数形 s + した (release)"},
     };
 
     for (const SessionCase& session_case : session_cases) {

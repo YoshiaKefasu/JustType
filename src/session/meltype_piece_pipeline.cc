@@ -52,7 +52,11 @@ std::string PieceLeadingSpace(const PiecePlan& plan, const std::size_t index) {
   if (index == 0 || index >= plan.pieces.size()) return std::string();
   const Segment& previous = plan.pieces[index - 1];
   const Segment& current = plan.pieces[index];
-  if (!previous.is_english && !current.is_english) return std::string();
+  // Only two English words are separated by a space ("Google Chrome").  A
+  // one-word English insertion inside Japanese stays glued to it: "Cloneした",
+  // "discordで", "さっきgoogleで調べた".  This is the default in the original
+  // Meltype too — the space is a word separator, not a script separator.
+  if (!previous.is_english || !current.is_english) return std::string();
   // The raw may already carry the whitespace (an English piece typed with a
   // leading or trailing space); never double it.
   if (EndsWithSpace(previous.raw)) return std::string();
@@ -486,19 +490,18 @@ std::vector<PieceSegment> ProtectSegmentsWithPieces(
     const std::ptrdiff_t p = owner[s];
     if (p >= 0 && pieces[static_cast<std::size_t>(p)].is_english) {
       const std::size_t pi = static_cast<std::size_t>(p);
-      // Meltype's boundary spaces live on the English piece's edge segments:
-      // a space before the piece when it is not first, after it when it is
-      // not last — never doubled against whitespace the raw already carries.
-      // Two adjacent English pieces (ChatGPT|Plus) must not both add a space
-      // at their shared edge: the second piece's leading space already opens
-      // the gap, so the first piece adds no trailing one there.
+      // Meltype's boundary spaces separate two English words and nothing else:
+      // "Google Chrome" keeps its space, while a one-word English insertion
+      // inside Japanese stays glued to it ("discordで", "Cloneした").
+      //
+      // So an English piece opens a gap only when the piece before it is also
+      // English, and never adds one after itself — the following English piece
+      // opens the shared gap on its own, and the Japanese piece after it must
+      // touch.  Whitespace the raw already carries is never doubled.
       const bool leading =
-          pi > 0 && !StartsWithSpace(pieces[pi].raw) &&
+          pi > 0 && pieces[pi - 1].is_english &&
+          !StartsWithSpace(pieces[pi].raw) &&
           !EndsWithSpace(pieces[pi - 1].raw);
-      const bool trailing =
-          pi + 1 < pieces.size() && !EndsWithSpace(pieces[pi].raw) &&
-          !StartsWithSpace(pieces[pi + 1].raw) &&
-          !(pieces[pi + 1].is_english && pieces[pi].is_english);
       // The run the English piece owns — one segment or Mozc's own
       // fine-grained split of the letters — collapses into one segment under
       // the concatenated keys.  Reaching the screen half raw, half Mozc
@@ -512,7 +515,7 @@ std::vector<PieceSegment> ProtectSegmentsWithPieces(
         ++e;
       }
       merged.value =
-          (leading ? " " : "") + pieces[pi].raw + (trailing ? " " : "");
+          (leading ? " " : "") + pieces[pi].raw;
       out.push_back(std::move(merged));
       s = e;
       continue;

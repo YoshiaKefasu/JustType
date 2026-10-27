@@ -281,7 +281,11 @@ mozc_cc_library(
 # MockEngineConverterInterface).
 mozc_cc_test(
     name = "session_e2e_test",
-    size = "small",
+    # medium: the run drives real Sessions (one per keystroke case) and the
+    # real SystemOne client, so it takes ~40s on its own.  The small tier's
+    # 60s limit was only just enough when the four //session, //composer and
+    # //meltype tests build and run in parallel.
+    size = "medium",
     srcs = ["session_e2e_test.cc"],
     target_compatible_with = ["@platforms//os:windows"],
     data = [

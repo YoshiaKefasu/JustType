@@ -86,23 +86,25 @@ TEST(MeltypePiecePipelineTest, ReadingIsUsedWhenConverterOffersNothing) {
 }
 
 TEST(MeltypePiecePipelineTest, BoundarySpacesFollowEnglishBoundaryRule) {
-  // Japanese | English | Japanese: a space at both boundaries, none at the
-  // string edges.
+  // A space separates two English words and nothing else.  An English word
+  // sitting between Japanese stays glued to it on both sides: "Cloneした",
+  // "discordで", "さっきgoogleで調べた".  This is the default in the original
+  // Meltype too — the space is a word separator, not a script separator.
   const PiecePlan plan =
       BuildPiecePlan(SakkigooglePieces(),
                      {{"さっき"}, {}, {"で調べた", "でしらべた"}});
-  EXPECT_EQ(JoinPieceValues(plan), "さっき google で調べた");
-  EXPECT_EQ(JoinPieceKeys(plan), "さっき google でしらべた");
+  EXPECT_EQ(JoinPieceValues(plan), "さっきgoogleで調べた");
+  EXPECT_EQ(JoinPieceKeys(plan), "さっきgoogleでしらべた");
 
-  // English first: no leading space at the string edge.
+  // English first: still glued to the Japanese that follows it.
   const PiecePlan leading =
       BuildPiecePlan({En("zenz"), Ja("paipuran", "ぱいぷらん")}, {{}, {"パイプラン"}});
-  EXPECT_EQ(JoinPieceValues(leading), "zenz パイプラン");
+  EXPECT_EQ(JoinPieceValues(leading), "zenzパイプラン");
 
-  // English last: no trailing space at the string edge.
+  // English last: still glued to the Japanese that precedes it.
   const PiecePlan trailing =
       BuildPiecePlan({Ja("kyouha", "きょうは"), En("google")}, {{"きょうは"}, {}});
-  EXPECT_EQ(JoinPieceValues(trailing), "きょうは google");
+  EXPECT_EQ(JoinPieceValues(trailing), "きょうはgoogle");
 
   // Japanese only: no spaces anywhere.
   const PiecePlan japanese =
@@ -110,12 +112,22 @@ TEST(MeltypePiecePipelineTest, BoundarySpacesFollowEnglishBoundaryRule) {
   EXPECT_EQ(JoinPieceValues(japanese), "こんにちは");
 }
 
+TEST(MeltypePiecePipelineTest, AdjacentEnglishPiecesKeepOneSpace) {
+  // Two English words are the one place a boundary space belongs, so a word
+  // inserted into Japanese must not cost the user the space between English
+  // words ("Google Chrome", "ChatGPT Plus").
+  const PiecePlan plan = BuildPiecePlan(
+      {Ja("kyouha", "きょうは"), En("Google"), En("Chrome")},
+      {{"きょうは"}, {}, {}});
+  EXPECT_EQ(JoinPieceValues(plan), "きょうはGoogle Chrome");
+}
+
 TEST(MeltypePiecePipelineTest, BoundarySpaceIsNeverDoubled) {
   // The raw already carries the whitespace, so the rule must not add a
   // second one.
   const PiecePlan plan =
       BuildPiecePlan({Ja("kyouha", "きょうは"), En("google ")}, {{"きょうは"}, {}});
-  EXPECT_EQ(JoinPieceValues(plan), "きょうは google ");
+  EXPECT_EQ(JoinPieceValues(plan), "きょうはgoogle ");
 
   // The raw opens with the whitespace instead: same rule, no doubling.
   const PiecePlan leading_space =
@@ -136,7 +148,7 @@ TEST(MeltypePiecePipelineTest, QuestionLeftContextIsDisplayedPrefixPlusSpace) {
   EXPECT_EQ(plan.questions[0].piece_index, 0u);
   EXPECT_EQ(plan.questions[0].left_context, "");
   EXPECT_EQ(plan.questions[1].piece_index, 2u);
-  EXPECT_EQ(plan.questions[1].left_context, "さっき google ");
+  EXPECT_EQ(plan.questions[1].left_context, "さっきgoogle");
   EXPECT_EQ(plan.questions[1].reading, "でしらべた");
 }
 
@@ -159,8 +171,8 @@ TEST(MeltypePiecePipelineTest, ApplyPieceChoiceValidatesAndRefreshesLeft) {
   EXPECT_TRUE(ApplyPieceChoice(&plan, 2, "でしらべた"));
   EXPECT_EQ(plan.segments[2].value, "でしらべた");
   ASSERT_EQ(plan.questions.size(), 2u);
-  EXPECT_EQ(plan.questions[1].left_context, "さっき google ");
-  EXPECT_EQ(JoinPieceValues(plan), "さっき google でしらべた");
+  EXPECT_EQ(plan.questions[1].left_context, "さっきgoogle");
+  EXPECT_EQ(JoinPieceValues(plan), "さっきgoogleでしらべた");
 }
 
 TEST(MeltypePiecePipelineTest, ApplyPieceChoiceRejectsEnglishPiece) {
@@ -178,15 +190,17 @@ TEST(MeltypePiecePipelineTest, QuestionCarriesLeftContextAndReading) {
   ASSERT_EQ(plan.questions.size(), 2u);
   EXPECT_EQ(PieceQuestionState(plan.questions[0]), "読み: さっき");
   EXPECT_EQ(PieceQuestionState(plan.questions[1]),
-            "左文脈: さっき google \n読み: でしらべた");
+            "左文脈: さっきgoogle\n読み: でしらべた");
 }
 
 TEST(MeltypePiecePipelineTest, LeadingSpaceMatchesJoin) {
   const PiecePlan plan =
       BuildPiecePlan(SakkigooglePieces(), {{"さっき"}, {}, {"で調べた"}});
+  // Neither edge of the English piece is English, so no boundary space is
+  // added on either side; the Japanese on both sides touches it.
   EXPECT_EQ(PieceLeadingSpace(plan, 0), "");
-  EXPECT_EQ(PieceLeadingSpace(plan, 1), " ");
-  EXPECT_EQ(PieceLeadingSpace(plan, 2), " ");
+  EXPECT_EQ(PieceLeadingSpace(plan, 1), "");
+  EXPECT_EQ(PieceLeadingSpace(plan, 2), "");
   EXPECT_EQ(PieceLeadingSpace(plan, 3), "");
 }
 
@@ -311,7 +325,7 @@ TEST(MeltypePieceProtectionTest, EnglishPieceKeepsMozcBaselineAroundIt) {
 
   // Japanese segments keep Mozc's conversion; only the English segment turns
   // into the typed letters with the boundary spaces.
-  EXPECT_EQ(JoinValues(protected_segments), "今日は google で");
+  EXPECT_EQ(JoinValues(protected_segments), "今日はgoogleで");
   EXPECT_EQ(JoinKeys(protected_segments), reading);
 }
 
@@ -397,7 +411,7 @@ TEST(MeltypePieceProtectionTest, RomajiReadingStillProtectsEnglishRun) {
            Ja("wotsukatte", "をつかって")},
           {"", "", "", "", ""});
   EXPECT_EQ(JoinValues(protected_segments),
-            "あの Github Cli wotsukatte");
+            "あのGithub Cliwotsukatte");
 }
 
 // The fallback must not guess: when the reading does not spell a piece out
@@ -425,7 +439,7 @@ TEST(MeltypePieceProtectionTest, EnglishPieceAcrossTwoSegmentsCollapses) {
           baseline, {Ja("kyouha", "きょうは"), En("google")}, {"", ""});
   ASSERT_EQ(protected_segments.size(), 2u);
   EXPECT_EQ(JoinKeys(protected_segments), "きょうはごおぐえ");
-  EXPECT_EQ(JoinValues(protected_segments), "今日は google");
+  EXPECT_EQ(JoinValues(protected_segments), "今日はgoogle");
 }
 
 // ---------------------------------------------------------------------------
@@ -448,7 +462,7 @@ TEST(MeltypePieceProtectionTest, AnofacebookEnglishRunsAcrossTwoSegments) {
           baseline, {Ja("ano", "あの"), En("facebook")}, {"", ""});
   ASSERT_EQ(protected_segments.size(), 2u);
   EXPECT_EQ(JoinKeys(protected_segments), reading);
-  EXPECT_EQ(JoinValues(protected_segments), "あの facebook");
+  EXPECT_EQ(JoinValues(protected_segments), "あのfacebook");
 }
 
 TEST(MeltypePieceProtectionTest, SakkiredditEnglishRunsAcrossTwoSegments) {
@@ -464,7 +478,7 @@ TEST(MeltypePieceProtectionTest, SakkiredditEnglishRunsAcrossTwoSegments) {
           baseline, {Ja("sakki", "さっき"), En("reddit")}, {"", ""});
   ASSERT_EQ(protected_segments.size(), 2u);
   EXPECT_EQ(JoinKeys(protected_segments), reading);
-  EXPECT_EQ(JoinValues(protected_segments), "さっき reddit");
+  EXPECT_EQ(JoinValues(protected_segments), "さっきreddit");
 }
 
 TEST(MeltypePieceProtectionTest, AshitahagoogleParticleStraddleIsSliced) {
@@ -482,7 +496,7 @@ TEST(MeltypePieceProtectionTest, AshitahagoogleParticleStraddleIsSliced) {
           baseline, {Ja("ashitaha", "あしたは"), En("google")}, {"", ""});
   ASSERT_EQ(protected_segments.size(), 3u);
   EXPECT_EQ(JoinKeys(protected_segments), reading);
-  EXPECT_EQ(JoinValues(protected_segments), "明日は google");
+  EXPECT_EQ(JoinValues(protected_segments), "明日はgoogle");
 }
 
 TEST(MeltypePieceProtectionTest,
@@ -506,7 +520,7 @@ TEST(MeltypePieceProtectionTest,
           {"さっき", "", "で調べた"});
   ASSERT_EQ(protected_segments.size(), 3u);
   EXPECT_EQ(JoinKeys(protected_segments), reading);
-  EXPECT_EQ(JoinValues(protected_segments), "さっき google で調べた");
+  EXPECT_EQ(JoinValues(protected_segments), "さっきgoogleで調べた");
 }
 
 TEST(MeltypePieceProtectionTest, EdgeSpacesFollowEnglishBoundaryRule) {
@@ -514,13 +528,13 @@ TEST(MeltypePieceProtectionTest, EdgeSpacesFollowEnglishBoundaryRule) {
   const std::vector<PieceSegment> leading = ProtectSegmentsWithPieces(
       {Mozc("zenz", "ゼンツ"), Mozc("ぱいぷらん", "パイプラン")},
       {En("zenz"), Ja("paipuran", "ぱいぷらん")}, {"", ""});
-  EXPECT_EQ(JoinValues(leading), "zenz パイプラン");
+  EXPECT_EQ(JoinValues(leading), "zenzパイプラン");
 
   // English last: leading space only.
   const std::vector<PieceSegment> trailing = ProtectSegmentsWithPieces(
       {Mozc("きょうは", "きょうは"), Mozc("ごおぐえ", "グーグル")},
       {Ja("kyouha", "きょうは"), En("google")}, {"", ""});
-  EXPECT_EQ(JoinValues(trailing), "きょうは google");
+  EXPECT_EQ(JoinValues(trailing), "きょうはgoogle");
 }
 
 TEST(MeltypePieceProtectionTest, AdjacentEnglishPiecesGetOneBoundarySpace) {
@@ -553,7 +567,7 @@ TEST(MeltypePieceProtectionTest, AdjacentEnglishPiecesGetOneBoundarySpace) {
       mixed_baseline, {Ja("kyouha", "きょうは"), En("ChatGPT"), En("Plus")},
       {"", "", ""});
   EXPECT_EQ(JoinKeys(mixed_protected), mixed_reading);
-  EXPECT_EQ(JoinValues(mixed_protected), "今日は ChatGPT Plus");
+  EXPECT_EQ(JoinValues(mixed_protected), "今日はChatGPT Plus");
 }
 
 // ---------------------------------------------------------------------------
