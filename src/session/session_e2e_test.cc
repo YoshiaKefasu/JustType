@@ -2097,6 +2097,85 @@ int main() {
       }
     }
 
+    // ---------------------------------------------------------------------
+    // 英語が一言・二言挟まる網羅ケース。
+    //
+    // すべてのケースで「英語は打ったとおりの大文字小文字のまま残り、後続の
+    // 日本語は日本語として入力され続ける」ことを固定する。ここが壊れると
+    // Composer が一時 ASCII モードから戻れず、以後のキーが全部生ローマ字に
+    // なる (「変換エンジンが不能になった」と見える症状)。
+    // ---------------------------------------------------------------------
+    struct MixedCase {
+      std::string keys;
+      std::string expected_preedit;
+      std::string note;
+    };
+    const std::vector<MixedCase> mixed_cases = {
+        {"sisutemuOnehanndanngata", "しすてむOneはんだんがた",
+         "日本語→大文字英語 One→日本語"},
+        {"sorewoTodoniirete", "それをTodoにいれて", "Todo + に"},
+        {"sorewoTodonikaite", "それをTodoにかいて", "Todo + に (報告ケース)"},
+        {"anoGithubCliwotsukatte", "あのGithubCliをつかって",
+         "CamelCase 2 語 + を"},
+        {"anoGithub Cliwotsukatte", "あのGithub Cliをつかって",
+         "空白区切りの 2 語 + を"},
+        {"kyouhaChatGPTtowotsukatta", "きょうはChatGPTとをつかった",
+         "頭字語 ChatGPT + とを (日本語は小文字)"},
+        {"AWSkaraGCPheikousuru", "AWSからGCPへいこうする",
+         "頭字語 2 つ + から/へ (日本語は小文字)"},
+        {"APIwoyobidashitekurenaika", "APIをよびだしてくれないか",
+         "頭字語 API + 長い日本語文 (日本語は小文字)"},
+        {"kanjigagojiruninaru", "かんじがごじるになる",
+         "小文字 gojiru は普通の日本語入力 (英語スイッチなし)"},
+        {"douiushikumika", "どういうしくみか", "英語なしの対照ケース"},
+        {"juubunseidoga", "じゅうぶんせいどが", "英語なしの対照ケース"},
+    };
+
+    for (const MixedCase& mixed : mixed_cases) {
+      absl::StatusOr<std::unique_ptr<Engine>> mixed_engine_or =
+          MockDataEngineFactory::Create();
+      if (!mixed_engine_or.ok()) {
+        Report(false, mixed.note, "mock engine を作れない");
+        continue;
+      }
+      Session session(**mixed_engine_or);
+      Config config;
+      ConfigHandler::GetDefaultConfig(&config);
+      config.set_shift_key_mode_switch(Config::ASCII_INPUT_MODE);
+      config.set_preedit_method(Config::ROMAN);
+      config.set_use_live_conversion(false);
+      config.set_use_dictionary_suggest(false);
+      session.SetConfig(config);
+      Request request;
+      session.SetRequest(request);
+      std::shared_ptr<Table> table = std::make_shared<Table>();
+      table->InitializeWithRequestAndConfig(request, config);
+      session.SetTable(table);
+
+      Command command;
+      session.IMEOn(&command);
+      for (const char key : mixed.keys) {
+        command.Clear();
+        mozc::commands::Input* input = command.mutable_input();
+        input->set_type(mozc::commands::Input::SEND_KEY);
+        mozc::commands::KeyEvent* key_event = input->mutable_key();
+        if (key == ' ') {
+          key_event->set_special_key(mozc::commands::KeyEvent::SPACE);
+        } else {
+          key_event->set_key_code(
+              static_cast<uint32_t>(static_cast<unsigned char>(key)));
+        }
+        session.SendKey(&command);
+      }
+
+      ReportEq(mixed.note, mixed.expected_preedit,
+               session.context().composer().GetStringForPreedit());
+      // 復帰できていれば入力モードはひらがなに戻っている。
+      Report(session.context().composer().GetInputMode() == HIRAGANA,
+             mixed.note + " (入力モードがひらがなに戻る)",
+             "input mode is not HIRAGANA");
+    }
+
     // A commit must end the temporary run in Hiragana on BOTH slots, and a
     // key event that echoes a mode (what the TSF client really does) must not
     // bring the old mode back. This drives the full Session path with the echo
@@ -2223,6 +2302,7 @@ int main() {
                session.context().composer().GetStringForPreedit());
     }
   }
+
   // -----------------------------------------------------------------------
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"
             << (g_failures == 0 ? " (すべて通った)\n" : "\n");

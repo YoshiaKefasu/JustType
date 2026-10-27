@@ -303,34 +303,30 @@ bool MeltypeBridge::EndsTemporaryShiftAsciiRun(const std::string_view raw,
       IsAcronym(raw_stem) && ToLowerAscii(english.raw) == stem;
   if (!dictionary_word && !meltype_acronym) return false;
 
-  // And it must not be able to grow: "Clie" is a prefix of "Client", so
-  // cutting there would break the word the user is still typing.
+  // The run ends exactly where it stops being a word.  Gate 9 established that
+  // the stem (the run without the letter just typed) is a finished English
+  // word or a recognised acronym, so the only question left is whether the run
+  // including this letter is *also* a word:
   //
-  // Known limit — deliberately accepted, and it is the price of the 0.00%
-  // measured above.  The decision is made on the keystroke that types the FIRST
-  // letter of a particle, and at that instant a finished word followed by a
-  // particle consonant is indistinguishable from a word that is still being
-  // typed:
+  //   "Clou" + "d" -> stem "clou" is a word and "cloud" is a word as well, so
+  //                    the user is still typing "Cloud" -> keep ASCII.
+  //   "Cli"  + "n" -> "clin" is a word (Clinic follows) -> keep ASCII.
+  //   "One"  + "h" -> "oneh" is not a word, so "One" is finished and は began.
+  //   "Github" + "w" -> "githubw" is not a word -> を began.
+  //   "Todo" + "n" -> "todon" is not a word -> に began.
   //
-  //   "anoAsh" + "d"     -> [JA:ano|あの][EN:Ash][JA:d|d]
-  //   "anoGithub" + "w" -> [JA:ano|あの][EN:Github][JA:w|w]
+  // A bare prefix test cannot express this.  "oneh" is the prefix of
+  // "onehanded"/"onehood"/"onehow", so a prefix test keeps the ASCII run alive
+  // for ever and the rest of the sentence comes out as romaji: measured on
+  // "sisutemuOnehanndanngata", which stayed "Onehaんだんがた".  Comparing whole
+  // words instead keeps every spelling that is genuinely a word intact.
   //
-  // Both are "complete dictionary word + one bare consonant", and Meltype
-  // leaves that consonant as raw ASCII in the Japanese tail either way.  The
-  // two only separate on the NEXT keystroke — "Ashdo" keeps one English piece
-  // (still the same word), "Githubwo" becomes [EN:Github][JA:wo|を] (the
-  // particle resolved) — which is too late to decide about the earlier letter.
-  //
-  // So a word that happens to end in a dictionary word plus a particle
-  // consonant ("Ashd", "Boxd", "Bashs") is read as Japanese + English, and
-  // the leftover consonant comes out as a full-width letter.  Guessing the
-  // other way to fix those cases would re-break the far more common ones: any
-  // rule that fires on "word + consonant" also fires inside every English word
-  // whose prefix is a word ("Fatiguesome", "Contracting"), measured at 7.59%
-  // of all English words.  Safety here means "never cut a word the user is
-  // still typing", so the ambiguous consonant keeps the ASCII run alive.
-  if (IsEnglishWordPrefix(word)) return false;
-  return true;
+  // Known limit: a finished word followed by a particle consonant is
+  // indistinguishable from a word still being typed at this instant ("Bash"+
+  // "s" is also how "Bashs" starts), so such a pair is read as Japanese and
+  // the consonant may come out as a full-width letter.  Erring the other way
+  // was measured at 7.59% of all English words, so this is the safer side.
+  return !IsEnglishWord(word);
 }
 
 }  // namespace session
