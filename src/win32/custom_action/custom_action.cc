@@ -823,3 +823,20 @@ UINT __stdcall UnregisterTIPRollback(MSIHANDLE msi_handle) {
   DEBUG_BREAK_FOR_DEBUGGER();
   return RegisterTIP(msi_handle);
 }
+
+// [Return='ignore']
+UINT __stdcall LogOffCurrentUser(MSIHANDLE msi_handle) {
+  DEBUG_BREAK_FOR_DEBUGGER();
+
+  // The IME is a TSF module that every process loads at start-up, so a fresh
+  // logon is the only reliable way to make the new build take effect
+  // everywhere.  The completion dialog offers this as an explicit choice, so
+  // the user is never signed out without asking.
+  //
+  // SHTDN_REASON_FLAG_PLANNED | SHTDN_REASON_MAJOR_SOFTWARE |
+  // SHTDN_REASON_MINOR_INSTALLATION
+  if (!::ExitWindowsEx(EWX_LOGOFF, 0x80030002u)) {
+    return ERROR_INSTALL_FAILURE;
+  }
+  return ERROR_SUCCESS;
+}

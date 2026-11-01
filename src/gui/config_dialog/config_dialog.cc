@@ -351,41 +351,6 @@ ConfigDialog::ConfigDialog()
   // here, after setupUi(), makes the C++ the last writer and keeps the dialog on
   // the システムOne naming no matter which .qm the user has installed.  Keep these
   // in sync with config_dialog.ui when a label changes.
-  zenzLiveCorrectionSectionLabel->setText(
-      QString::fromUtf8("システムOne 判断型補正"));
-  zenzConditionFieldsVisibleCheckBox->setText(
-      QString::fromUtf8("システムOne 判断型条件フィールド"));
-  zenzConditionFieldsVisibleCheckBox->setToolTip(QString::fromUtf8(
-      "システムOne (Jev / Laya) のプロンプト条件フィールドの表示を切り替えます。"
-      "折りたたんでも設定値は保持され、システムOne (Jev / Laya) を使用中は送信内容は変わりません。"));
-  zenzFeedbackLearningSectionLabel->setText(
-      QString::fromUtf8("システムOne学習（通常変換履歴）"));
-  zenzFeedbackLearningSubsectionLabel->setText(
-      QString::fromUtf8("システムOne学習（補正フィードバック）"));
-  zenzFeedbackLearningSubsectionLabel->setToolTip(QString::fromUtf8(
-      "システムOne 補正の採用・却下を記録し、保存済みの評価を候補順位や自動ブロックの"
-      "判定に利用します。通常の変換履歴とは別に管理されます。"));
-  zenzLiveCorrectionDelayLabel->setText(
-      QString::fromUtf8("システムOne 補正開始の遅延"));
-  zenzLiveCorrectionDelayLabel->setToolTip(QString::fromUtf8(
-      "ライブ変換後、システムOne 補正を開始するまでの待ち時間です。"));
-  zenzLiveCorrectionMinKeyLengthLabel->setText(
-      QString::fromUtf8("システムOne 補正開始の最小文字数"));
-  zenzLiveCorrectionMinKeyLengthLabel->setToolTip(QString::fromUtf8(
-      "システムOne 補正を開始する最小文字数です。短くすると補正機会は増えますが、"
-      "誤補正も増える可能性があります。"));
-  zenzDeferLiveConversionDisplayCheckBox->setText(QString::fromUtf8(
-      "システムOne 補正結果が返るまで通常のライブ変換結果を表示しない"));
-  zenzDeferLiveConversionDisplayCheckBox->setToolTip(QString::fromUtf8(
-      "システムOne 補正が実行される場合、補正結果が確定するまで通常の"
-      "ライブ変換結果を表示しません。システムOne が採用されなかった場合は"
-      "通常の変換結果を表示します。"));
-  zenzDeferredPresentationTimeoutLabel->setText(
-      QString::fromUtf8("システムOne 補正開始後の最大待機時間"));
-  zenzDeferredPresentationTimeoutLabel->setToolTip(QString::fromUtf8(
-      "「通常のライブ変換結果を表示しない」が有効な場合、システムOne 補正要求の送信後、"
-      "この時間以内に結果が返らなければ、その回の システムOne 補正を中止して"
-      "通常のライブ変換結果を表示します。"));
   zenzLiveCorrectionRightContextCheckBox->setText(
       QString::fromUtf8("システムOne 右文脈を使用する"));
   zenzLiveCorrectionRightContextCheckBox->setToolTip(QString::fromUtf8(
@@ -395,24 +360,6 @@ ConfigDialog::ConfigDialog()
       QString::fromUtf8("システムOne 右文脈長"));
   zenzLiveCorrectionRightContextLengthLabel->setToolTip(QString::fromUtf8(
       "システムOne 右文脈として使う最大文字数です。"));
-  zenzMozcHistoryLearningCheckBox->setText(QString::fromUtf8(
-      "確定した システムOne 補正を通常の変換履歴に追加学習する"));
-  zenzMozcHistoryLearningCheckBox->setToolTip(QString::fromUtf8(
-      "システムOne 補正を明示的に確定した場合、通常の変換履歴へ追加学習します。"
-      "システムOne feedback の記録設定とは独立しています。変換履歴の学習が読み取り専用・"
-      "無効の場合や、シークレット・保護入力では書き込みません。"));
-  zenzFeedbackRecordingCheckBox->setText(
-      QString::fromUtf8("システムOne 補正の採用・却下を記録する"));
-  zenzFeedbackRecordingCheckBox->setToolTip(QString::fromUtf8(
-      "システムOne 補正の採用・却下をローカルの feedback データに記録します。保存済みデータを"
-      "変換へ自動適用するかどうか、および通常の変換履歴へ追加学習するかどうかとは独立しています。"));
-  zenzFeedbackAutoBlockCheckBox->setText(QString::fromUtf8(
-      "システムOne 補正と異なる結果で確定した場合、その補正を自動ブロックする"));
-  zenzFeedbackAutoBlockCheckBox->setToolTip(QString::fromUtf8(
-      "同じ読み・同じ文脈クラス・同じ システムOne 補正について、拒否回数と拒否割合の両方が"
-      "設定値以上になった場合に表示を抑制します。自動ブロック中も システムOne の内部生成と"
-      "最終確定との比較を続け、一致が増えて拒否割合が下がれば自動解除します。"
-      "通常の変換候補から削除する機能ではありません。"));
   systemoneSectionLabel->setText(
       QString::fromUtf8("システムOne (Jev / Laya) 判断型変換"));
   systemoneSectionLabel->setToolTip(QString::fromUtf8(
@@ -513,25 +460,6 @@ ConfigDialog::ConfigDialog()
   liveConversionMinKeyLengthSpinBox->setSingleStep(1);
   liveConversionMinKeyLengthSpinBox->setSuffix(QString::fromUtf8(" 文字"));
 
-  zenzLiveCorrectionDelaySpinBox->setRange(0, 5000);
-  zenzLiveCorrectionDelaySpinBox->setSingleStep(1);
-  zenzLiveCorrectionDelaySpinBox->setSuffix(QString::fromUtf8(" ms"));
-  zenzLiveCorrectionDelaySpinBox->setSpecialValueText(QString::fromUtf8("即時"));
-
-  zenzDeferredPresentationTimeoutSpinBox->setRange(0, 3000);
-  zenzDeferredPresentationTimeoutSpinBox->setSingleStep(50);
-  zenzDeferredPresentationTimeoutSpinBox->setSuffix(
-      QString::fromUtf8(" ms"));
-
-  zenzLiveCorrectionMinKeyLengthSpinBox->setRange(2, 20);
-  zenzLiveCorrectionMinKeyLengthSpinBox->setSingleStep(1);
-  zenzLiveCorrectionMinKeyLengthSpinBox->setSuffix(QString::fromUtf8(" 文字"));
-
-  zenzLiveCorrectionProfileLineEdit->setMaxLength(128);
-  zenzLiveCorrectionTopicLineEdit->setMaxLength(128);
-  zenzLiveCorrectionStyleLineEdit->setMaxLength(128);
-  zenzLiveCorrectionSettingsLineEdit->setMaxLength(128);
-
   zenzLiveCorrectionRightContextLengthSpinBox->setRange(0, 128);
   zenzLiveCorrectionRightContextLengthSpinBox->setSingleStep(1);
   zenzLiveCorrectionRightContextLengthSpinBox->setSuffix(
@@ -543,16 +471,6 @@ ConfigDialog::ConfigDialog()
   zenzFeedbackMinKeyLengthSpinBox->setSingleStep(1);
   zenzFeedbackMinKeyLengthSpinBox->setSuffix(
       QString::fromUtf8(" 文字以上"));
-
-  zenzFeedbackAutoBlockRejectThresholdSpinBox->setRange(1, 999);
-  zenzFeedbackAutoBlockRejectThresholdSpinBox->setSingleStep(1);
-  zenzFeedbackAutoBlockRejectThresholdSpinBox->setSuffix(
-      tr(" 回"));
-
-  zenzFeedbackAutoBlockMinimumRejectPercentageSpinBox->setRange(1, 100);
-  zenzFeedbackAutoBlockMinimumRejectPercentageSpinBox->setSingleStep(1);
-  zenzFeedbackAutoBlockMinimumRejectPercentageSpinBox->setSuffix(
-      tr(" % 以上"));
 
   punctuationsSettingComboBox->addItem(QString::fromUtf8("、。"));
   punctuationsSettingComboBox->addItem(QString::fromUtf8("，．"));
@@ -688,27 +606,9 @@ ConfigDialog::ConfigDialog()
                    pendingRomanDimnessSpinBox, SLOT(setEnabled(bool)));
   QObject::connect(liveConversionCheckBox, SIGNAL(stateChanged(int)), this,
                    SLOT(SelectLiveConversionSetting(int)));
-  QObject::connect(zenzLiveCorrectionCheckBox, SIGNAL(stateChanged(int)), this,
-                   SLOT(SelectZenzLiveCorrectionSetting(int)));
-  QObject::connect(zenzDeferLiveConversionDisplayCheckBox,
-                   SIGNAL(stateChanged(int)), this,
-                   SLOT(SelectZenzDeferredPresentationSetting(int)));
   QObject::connect(zenzLiveCorrectionRightContextCheckBox,
                    SIGNAL(stateChanged(int)), this,
                    SLOT(SelectZenzRightContextSetting(int)));
-  QObject::connect(zenzFeedbackReuseCheckBox,
-                   SIGNAL(stateChanged(int)), this,
-                   SLOT(SelectZenzFeedbackReuseSetting(int)));
-  QObject::connect(zenzFeedbackMinKeyLengthCheckBox,
-                   &QCheckBox::stateChanged, this, [this](int) {
-                     SelectZenzFeedbackReuseSetting(
-                         zenzFeedbackReuseCheckBox->isChecked());
-                   });
-  QObject::connect(zenzFeedbackAutoBlockCheckBox,
-                   SIGNAL(stateChanged(int)), this,
-                   SLOT(SelectZenzFeedbackAutoBlockSetting(int)));
-  QObject::connect(zenzConditionFieldsVisibleCheckBox, SIGNAL(toggled(bool)),
-                   this, SLOT(SelectZenzConditionFieldsVisibility(bool)));
   QObject::connect(systemoneDecisionCheckBox, SIGNAL(stateChanged(int)), this,
                    SLOT(SelectSystemOneDecisionSetting(int)));
   QObject::connect(useAutoConversion, SIGNAL(stateChanged(int)), this,
@@ -717,19 +617,6 @@ ConfigDialog::ConfigDialog()
                    SLOT(SelectDirectCommitSetting(int)));
   QObject::connect(useModeIndicator, SIGNAL(toggled(bool)),
                    modeIndicatorThemeComboBox, SLOT(setEnabled(bool)));
-  QObject::connect(historySuggestCheckBox, SIGNAL(stateChanged(int)), this,
-                   SLOT(SelectSuggestionSetting(int)));
-  QObject::connect(dictionarySuggestCheckBox, SIGNAL(stateChanged(int)), this,
-                   SLOT(SelectSuggestionSetting(int)));
-  QObject::connect(realtimeConversionCheckBox, SIGNAL(stateChanged(int)), this,
-                   SLOT(SelectSuggestionSetting(int)));
-  QObject::connect(launchAdministrationDialogButton, SIGNAL(clicked()), this,
-                   SLOT(LaunchAdministrationDialog()));
-  QObject::connect(setDefaultImeButton, SIGNAL(clicked()), this,
-                   SLOT(SetMozkeyAsDefaultIme()));
-  QObject::connect(restoreDefaultImeButton, SIGNAL(clicked()), this,
-                   SLOT(RestorePreviousDefaultImeSetting()));
-
   QObject::connect(inputPreeditTextColorButton, SIGNAL(clicked()), this,
                    SLOT(SelectPreeditColor()));
   QObject::connect(inputPreeditBackgroundColorButton, SIGNAL(clicked()), this,
@@ -958,15 +845,6 @@ bool RefreshTsfProfileIcon();
 #endif  // _WIN32
 
 bool ConfigDialog::Update() {
-  if (zenzDeferredPresentationTimeoutSpinBox->value() < 50) {
-    QMessageBox::warning(
-        this, windowTitle(),
-        tr("システムOne correction maximum wait must be at least 50 ms."));
-    zenzDeferredPresentationTimeoutSpinBox->setFocus();
-    zenzDeferredPresentationTimeoutSpinBox->selectAll();
-    return false;
-  }
-
   config::Config config;
   ConvertToProto(&config);
 
@@ -1183,21 +1061,7 @@ constexpr uint32_t kMaxLiveConversionDelayMsec = 1000;
 constexpr uint32_t kDefaultLiveConversionMinKeyLength = 2;
 constexpr uint32_t kMinLiveConversionMinKeyLength = 1;
 constexpr uint32_t kMaxLiveConversionMinKeyLength = 20;
-constexpr uint32_t kDefaultZenzLiveCorrectionDelayMsec = 700;
-constexpr uint32_t kMaxZenzLiveCorrectionDelayMsec = 5000;
-constexpr uint32_t kDefaultZenzDeferredPresentationTimeoutMsec = 250;
-constexpr uint32_t kMinZenzDeferredPresentationTimeoutMsec = 50;
-constexpr uint32_t kMaxZenzDeferredPresentationTimeoutMsec = 3000;
-constexpr uint32_t kDefaultZenzLiveCorrectionMinKeyLength = 2;
-constexpr uint32_t kMinZenzLiveCorrectionMinKeyLength = 2;
-constexpr uint32_t kMaxZenzLiveCorrectionMinKeyLength = 20;
 constexpr uint32_t kMaxZenzLiveCorrectionRightContextLength = 128;
-constexpr uint32_t kDefaultZenzAutoBlockMinimumRejectCount = 1;
-constexpr uint32_t kMinZenzAutoBlockMinimumRejectCount = 1;
-constexpr uint32_t kMaxZenzAutoBlockMinimumRejectCount = 999;
-constexpr uint32_t kDefaultZenzAutoBlockMinimumRejectPercentage = 50;
-constexpr uint32_t kMinZenzAutoBlockMinimumRejectPercentage = 1;
-constexpr uint32_t kMaxZenzAutoBlockMinimumRejectPercentage = 100;
 constexpr uint32_t kDefaultSystemOneTimeoutMsec = 2500;
 constexpr uint32_t kMinSystemOneTimeoutMsec = 100;
 constexpr uint32_t kMaxSystemOneTimeoutMsec = 10000;
@@ -3712,49 +3576,8 @@ void ConfigDialog::ConvertFromProto(const config::Config &config) {
   SET_CHECKBOX(showLiveConversionRubyWindow,
                show_live_conversion_ruby_window);
 
-  SET_CHECKBOX(zenzLiveCorrectionCheckBox, use_zenz_live_correction);
-  SET_CHECKBOX(zenzDeferLiveConversionDisplayCheckBox,
-               defer_live_conversion_display_until_zenz_result);
-
-  const uint32_t zenz_live_correction_delay_msec =
-      config.has_zenz_live_correction_delay_msec()
-          ? config.zenz_live_correction_delay_msec()
-          : kDefaultZenzLiveCorrectionDelayMsec;
-  zenzLiveCorrectionDelaySpinBox->setValue(
-      static_cast<int>(
-          std::clamp(zenz_live_correction_delay_msec,
-                     0u,
-                     kMaxZenzLiveCorrectionDelayMsec)));
-
-  const uint32_t zenz_deferred_presentation_timeout_msec =
-      config.has_zenz_deferred_presentation_timeout_msec()
-          ? config.zenz_deferred_presentation_timeout_msec()
-          : kDefaultZenzDeferredPresentationTimeoutMsec;
-  zenzDeferredPresentationTimeoutSpinBox->setValue(
-      static_cast<int>(
-          std::clamp(zenz_deferred_presentation_timeout_msec,
-                     kMinZenzDeferredPresentationTimeoutMsec,
-                     kMaxZenzDeferredPresentationTimeoutMsec)));
-
-  const uint32_t zenz_live_correction_min_key_length =
-      config.has_zenz_live_correction_min_key_length()
-          ? config.zenz_live_correction_min_key_length()
-          : kDefaultZenzLiveCorrectionMinKeyLength;
-  zenzLiveCorrectionMinKeyLengthSpinBox->setValue(
-      static_cast<int>(
-          std::clamp(zenz_live_correction_min_key_length,
-                     kMinZenzLiveCorrectionMinKeyLength,
-                     kMaxZenzLiveCorrectionMinKeyLength)));
-
-  zenzLiveCorrectionProfileLineEdit->setText(
-      ToQString(config.zenz_live_correction_profile()));
-  zenzLiveCorrectionTopicLineEdit->setText(
-      ToQString(config.zenz_live_correction_topic()));
-  zenzLiveCorrectionStyleLineEdit->setText(
-      ToQString(config.zenz_live_correction_style()));
-  zenzLiveCorrectionSettingsLineEdit->setText(
-      ToQString(config.zenz_live_correction_settings()));
-
+  // 右文脈は「システムOne (Jev / Laya) 判断型変換」セクションに移したので、
+  // 値の読み込みもそのセクションの近くで行う。
   SET_CHECKBOX(zenzLiveCorrectionRightContextCheckBox,
                use_zenz_live_correction_right_context);
   const uint32_t zenz_live_correction_right_context_length =
@@ -3765,40 +3588,8 @@ void ConfigDialog::ConvertFromProto(const config::Config &config) {
                      0u,
                      kMaxZenzLiveCorrectionRightContextLength)));
 
-  SelectZenzLiveCorrectionSetting(
-      static_cast<int>(zenzLiveCorrectionCheckBox->isChecked()));
-
-  SET_CHECKBOX(zenzFeedbackRecordingCheckBox, use_zenz_feedback_recording);
-  SET_CHECKBOX(zenzFeedbackReuseCheckBox, use_zenz_feedback_reuse);
-  SET_CHECKBOX(zenzMozcHistoryLearningCheckBox,
-               use_zenz_mozc_history_learning);
-  SET_CHECKBOX(zenzFeedbackMinKeyLengthCheckBox,
-               use_zenz_feedback_min_key_length);
   zenzFeedbackMinKeyLengthSpinBox->setValue(static_cast<int>(
       std::clamp<uint32_t>(config.zenz_feedback_min_key_length(), 1, 20)));
-
-  SET_CHECKBOX(zenzFeedbackAutoBlockCheckBox,
-               use_zenz_auto_block_rejected_correction);
-  const uint32_t zenz_auto_block_minimum_reject_count =
-      config.has_zenz_auto_block_reject_threshold()
-          ? config.zenz_auto_block_reject_threshold()
-          : kDefaultZenzAutoBlockMinimumRejectCount;
-  zenzFeedbackAutoBlockRejectThresholdSpinBox->setValue(
-      static_cast<int>(
-          std::clamp(zenz_auto_block_minimum_reject_count,
-                     kMinZenzAutoBlockMinimumRejectCount,
-                     kMaxZenzAutoBlockMinimumRejectCount)));
-  const uint32_t zenz_auto_block_minimum_reject_percentage =
-      config.has_zenz_auto_block_minimum_reject_percentage()
-          ? config.zenz_auto_block_minimum_reject_percentage()
-          : kDefaultZenzAutoBlockMinimumRejectPercentage;
-  zenzFeedbackAutoBlockMinimumRejectPercentageSpinBox->setValue(
-      static_cast<int>(
-          std::clamp(zenz_auto_block_minimum_reject_percentage,
-                     kMinZenzAutoBlockMinimumRejectPercentage,
-                     kMaxZenzAutoBlockMinimumRejectPercentage)));
-  SelectZenzFeedbackReuseSetting(
-      static_cast<int>(zenzFeedbackReuseCheckBox->isChecked()));
 
   SET_CHECKBOX(systemoneDecisionCheckBox, use_systemone_decision);
   // Endpoint, model name, and API key fall back to the proto defaults, so an
@@ -3818,9 +3609,6 @@ void ConfigDialog::ConvertFromProto(const config::Config &config) {
   SET_CHECKBOX(systemoneDebugLoggingCheckBox, systemone_debug_logging);
   SelectSystemOneDecisionSetting(
       static_cast<int>(systemoneDecisionCheckBox->isChecked()));
-
-  SelectZenzConditionFieldsVisibility(
-      zenzConditionFieldsVisibleCheckBox->isChecked());
 
   SET_CHECKBOX(useAutoConversion, use_auto_conversion);
   kutenCheckBox->setChecked(config.auto_conversion_key() &
@@ -4100,47 +3888,19 @@ void ConfigDialog::ConvertToProto(config::Config *config) const {
   GET_CHECKBOX(showLiveConversionRubyWindow,
                show_live_conversion_ruby_window);
 
-  GET_CHECKBOX(zenzLiveCorrectionCheckBox, use_zenz_live_correction);
-  GET_CHECKBOX(zenzDeferLiveConversionDisplayCheckBox,
-               defer_live_conversion_display_until_zenz_result);
-  config->set_zenz_live_correction_delay_msec(
-      static_cast<uint32_t>(zenzLiveCorrectionDelaySpinBox->value()));
-  config->set_zenz_deferred_presentation_timeout_msec(
-      static_cast<uint32_t>(
-          zenzDeferredPresentationTimeoutSpinBox->value()));
-  config->set_zenz_live_correction_min_key_length(
-      static_cast<uint32_t>(
-          zenzLiveCorrectionMinKeyLengthSpinBox->value()));
-  config->set_zenz_live_correction_profile(
-      zenzLiveCorrectionProfileLineEdit->text().toUtf8().constData());
-  config->set_zenz_live_correction_topic(
-      zenzLiveCorrectionTopicLineEdit->text().toUtf8().constData());
-  config->set_zenz_live_correction_style(
-      zenzLiveCorrectionStyleLineEdit->text().toUtf8().constData());
-  config->set_zenz_live_correction_settings(
-      zenzLiveCorrectionSettingsLineEdit->text().toUtf8().constData());
+  // システムOne 補正は「ライブ変換」と「システムOne (Jev / Laya) 判断型変換」の
+  // 2 つのスイッチだけで決まる。旧 use_zenz_live_correction は廃止し、
+  // 有効・無効はこの 2 つから導く (プロファイル互換のためフィールドは残る)。
+  config->set_use_zenz_live_correction(liveConversionCheckBox->isChecked() &&
+                                       systemoneDecisionCheckBox->isChecked());
   GET_CHECKBOX(zenzLiveCorrectionRightContextCheckBox,
                use_zenz_live_correction_right_context);
   config->set_zenz_live_correction_right_context_length(
       static_cast<uint32_t>(
           zenzLiveCorrectionRightContextLengthSpinBox->value()));
 
-  GET_CHECKBOX(zenzFeedbackRecordingCheckBox, use_zenz_feedback_recording);
-  GET_CHECKBOX(zenzFeedbackReuseCheckBox, use_zenz_feedback_reuse);
-  GET_CHECKBOX(zenzMozcHistoryLearningCheckBox,
-               use_zenz_mozc_history_learning);
-  GET_CHECKBOX(zenzFeedbackMinKeyLengthCheckBox,
-               use_zenz_feedback_min_key_length);
   config->set_zenz_feedback_min_key_length(
       static_cast<uint32_t>(zenzFeedbackMinKeyLengthSpinBox->value()));
-  GET_CHECKBOX(zenzFeedbackAutoBlockCheckBox,
-               use_zenz_auto_block_rejected_correction);
-  config->set_zenz_auto_block_reject_threshold(
-      static_cast<uint32_t>(
-          zenzFeedbackAutoBlockRejectThresholdSpinBox->value()));
-  config->set_zenz_auto_block_minimum_reject_percentage(
-      static_cast<uint32_t>(
-          zenzFeedbackAutoBlockMinimumRejectPercentageSpinBox->value()));
 
   GET_CHECKBOX(systemoneDecisionCheckBox, use_systemone_decision);
   config->set_systemone_endpoint_url(
@@ -5141,91 +4901,13 @@ void ConfigDialog::SelectLiveConversionSetting(int state) {
   showLiveConversionRubyWindow->setEnabled(enabled);
   showCandidateWindowOnInitialConversionCheckBox->setEnabled(!enabled);
 
-  zenzLiveCorrectionCheckBox->setEnabled(enabled);
-  SelectZenzLiveCorrectionSetting(
-      enabled ? static_cast<int>(zenzLiveCorrectionCheckBox->isChecked()) : 0);
-}
-
-void ConfigDialog::SelectZenzLiveCorrectionSetting(int state) {
-  const bool enabled =
-      liveConversionCheckBox->isChecked() && static_cast<bool>(state);
-
-  zenzLiveCorrectionDelayLabel->setEnabled(enabled);
-  zenzLiveCorrectionDelaySpinBox->setEnabled(enabled);
-  zenzDeferLiveConversionDisplayCheckBox->setEnabled(enabled);
-  SelectZenzDeferredPresentationSetting(
-      enabled ? static_cast<int>(
-                    zenzDeferLiveConversionDisplayCheckBox->isChecked())
-              : 0);
-  zenzLiveCorrectionMinKeyLengthLabel->setEnabled(enabled);
-  zenzLiveCorrectionMinKeyLengthSpinBox->setEnabled(enabled);
-  zenzLiveCorrectionProfileLabel->setEnabled(enabled);
-  zenzLiveCorrectionProfileLineEdit->setEnabled(enabled);
-  zenzLiveCorrectionTopicLabel->setEnabled(enabled);
-  zenzLiveCorrectionTopicLineEdit->setEnabled(enabled);
-  zenzLiveCorrectionStyleLabel->setEnabled(enabled);
-  zenzLiveCorrectionStyleLineEdit->setEnabled(enabled);
-  zenzLiveCorrectionSettingsLabel->setEnabled(enabled);
-  zenzLiveCorrectionSettingsLineEdit->setEnabled(enabled);
-  zenzLiveCorrectionRightContextCheckBox->setEnabled(enabled);
-  SelectZenzRightContextSetting(
-      enabled ? static_cast<int>(
-                    zenzLiveCorrectionRightContextCheckBox->isChecked())
-              : 0);
-  // Recording, automatic reuse, and external conversion history learning are
-  // independent preferences. Keep their controls available even when live
-  // correction is disabled: the feedback candidate rewriter also operates
-  // on normal conversion, and turning live correction back on must not
-  // silently change any of the three persisted choices.
-}
-
-void ConfigDialog::SelectZenzDeferredPresentationSetting(int state) {
-  const bool enabled =
-      liveConversionCheckBox->isChecked() &&
-      zenzLiveCorrectionCheckBox->isChecked() &&
-      static_cast<bool>(state);
-
-  zenzDeferredPresentationTimeoutLabel->setEnabled(enabled);
-  zenzDeferredPresentationTimeoutSpinBox->setEnabled(enabled);
-}
-
-void ConfigDialog::SelectZenzFeedbackReuseSetting(int state) {
-  const bool enabled = static_cast<bool>(state);
-
-  zenzFeedbackAutoBlockCheckBox->setEnabled(enabled);
-  zenzFeedbackMinKeyLengthCheckBox->setEnabled(enabled);
-  const bool min_key_enabled =
-      enabled && zenzFeedbackMinKeyLengthCheckBox->isChecked();
-  zenzFeedbackMinKeyLengthLabel->setEnabled(min_key_enabled);
-  zenzFeedbackMinKeyLengthSpinBox->setEnabled(min_key_enabled);
-
-  SelectZenzFeedbackAutoBlockSetting(
-      enabled ? static_cast<int>(
-                    zenzFeedbackAutoBlockCheckBox->isChecked())
-              : 0);
-}
-
-void ConfigDialog::SelectZenzFeedbackAutoBlockSetting(int state) {
-  const bool enabled =
-      zenzFeedbackReuseCheckBox->isChecked() && static_cast<bool>(state);
-
-  zenzFeedbackAutoBlockRejectThresholdLabel->setEnabled(enabled);
-  zenzFeedbackAutoBlockRejectThresholdSpinBox->setEnabled(enabled);
-  zenzFeedbackAutoBlockMinimumRejectPercentageLabel->setEnabled(enabled);
-  zenzFeedbackAutoBlockMinimumRejectPercentageSpinBox->setEnabled(enabled);
-}
-
-void ConfigDialog::SelectZenzConditionFieldsVisibility(bool visible) {
-  // Display-only fold. The stored values are never cleared and the Zenzai
-  // v3/v3.2 prompt payload is unchanged while these rows are collapsed.
-  zenzLiveCorrectionProfileLabel->setVisible(visible);
-  zenzLiveCorrectionProfileLineEdit->setVisible(visible);
-  zenzLiveCorrectionTopicLabel->setVisible(visible);
-  zenzLiveCorrectionTopicLineEdit->setVisible(visible);
-  zenzLiveCorrectionStyleLabel->setVisible(visible);
-  zenzLiveCorrectionStyleLineEdit->setVisible(visible);
-  zenzLiveCorrectionSettingsLabel->setVisible(visible);
-  zenzLiveCorrectionSettingsLineEdit->setVisible(visible);
+  // The feedback settings now live under ライブ変換, so they follow the same
+  // cascade: with live conversion off there is no live correction to judge and
+  // nothing to tune here.
+  zenzFeedbackMinKeyLengthLabel->setEnabled(enabled);
+  zenzFeedbackMinKeyLengthSpinBox->setEnabled(enabled);
+  zenzFeedbackDataLabel->setEnabled(enabled);
+  editZenzFeedbackButton->setEnabled(enabled);
 }
 
 void ConfigDialog::SelectSystemOneDecisionSetting(int state) {
@@ -5242,12 +4924,18 @@ void ConfigDialog::SelectSystemOneDecisionSetting(int state) {
   // systemoneDebugLoggingCheckBox is deliberately left enabled while the
   // feature is off: the log is what explains why no request was sent, so
   // gating it here would hide the only available evidence.
+
+  // 右文脈はこのセクションの最下部にあるので、このスイッチに従う。
+  zenzLiveCorrectionRightContextCheckBox->setEnabled(enabled);
+  SelectZenzRightContextSetting(
+      enabled ? static_cast<int>(
+                    zenzLiveCorrectionRightContextCheckBox->isChecked())
+              : 0);
 }
 
 void ConfigDialog::SelectZenzRightContextSetting(int state) {
-  const bool enabled = liveConversionCheckBox->isChecked() &&
-                       zenzLiveCorrectionCheckBox->isChecked() &&
-                       static_cast<bool>(state);
+  const bool enabled =
+      systemoneDecisionCheckBox->isChecked() && static_cast<bool>(state);
 
   zenzLiveCorrectionRightContextLengthLabel->setEnabled(enabled);
   zenzLiveCorrectionRightContextLengthSpinBox->setEnabled(enabled);

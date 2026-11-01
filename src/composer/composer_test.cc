@@ -3450,5 +3450,382 @@ TEST_F(ComposerTest, CreateEmptyComposerData) {
   EXPECT_EQ(data.source_text(), "");
 }
 
+TEST_F(ComposerTest, ConvertPositionToRawAndComposition) {
+  table_->AddRule("ka", "か", "");
+  table_->AddRule("n", "ん", "");
+  table_->AddRule("da", "だ", "");
+
+  // Empty composer: every position safely maps to 0.
+  EXPECT_EQ(composer_->ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(10), 0);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(10), 0);
+
+  // [か|ka][ん|n][だ|da] -> composed "かんだ" (3) / raw "kanda" (5)
+  composer_->InsertCharacter("kanda");
+  ASSERT_EQ(composer_->GetLength(), 3);
+  ASSERT_EQ(composer_->GetRawString(), "kanda");
+
+  EXPECT_EQ(composer_->ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(2), 3);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(3), 5);
+  // Out of range is clamped to the end of the raw string.
+  EXPECT_EQ(composer_->ConvertPositionToRaw(4), 5);
+
+  EXPECT_EQ(composer_->ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(1), 1);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(2), 1);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(3), 2);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(4), 3);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(5), 3);
+  // Out of range is clamped to the end of the composition.
+  EXPECT_EQ(composer_->ConvertPositionToComposition(6), 3);
+}
+
+TEST_F(ComposerTest, ConvertPositionWithTrailingPendingInput) {
+  table_->AddRule("ka", "か", "");
+
+  // "ka" is fixed, then "k" stays pending in a new chunk:
+  //   [か|ka][k|k] -> composed "かk" (2) / raw "kak" (3)
+  composer_->InsertCharacter("ka");
+  ASSERT_EQ(composer_->GetLength(), 1);
+  ASSERT_EQ(composer_->GetRawString(), "ka");
+
+  composer_->InsertCharacter("k");
+  ASSERT_EQ(composer_->GetLength(), 2);
+  ASSERT_EQ(composer_->GetRawString(), "kak");
+
+  EXPECT_EQ(composer_->ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(2), 3);
+
+  EXPECT_EQ(composer_->ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(1), 1);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(2), 1);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(3), 2);
+}
+
+TEST_F(ComposerTest, InsertFixedPiece) {
+  config_->set_preedit_method(Config::ROMAN);
+
+  ASSERT_TRUE(composer_->InsertFixedPiece("ka", "か"));
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "か");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "か");
+  EXPECT_EQ(composer_->GetRawString(), "ka");
+  EXPECT_EQ(composer_->GetLength(), 1);
+  EXPECT_EQ(composer_->GetCursor(), 1);
+
+  // The chunk is fixed, so no unresolved roman input is left behind.
+  EXPECT_EQ(composer_->GetPendingRomanInputLength(), 0);
+  EXPECT_FALSE(composer_->IsPendingRomanInputAtCompositionStart());
+
+  // HALF_ASCII keeps the typed romaji.  This is the invariant Meltype relies
+  // on when the input is re-rendered.
+  transliteration::Transliterations transliterations;
+  composer_->GetTransliterations(&transliterations);
+  EXPECT_EQ(transliterations[transliteration::HALF_ASCII], "ka");
+
+  // The Step 0 position conversion works on the fixed chunk.
+  EXPECT_EQ(composer_->ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(1), 1);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(2), 1);
+
+  // Contrast: the same pair via InsertCharacterKeyAndPreedit stays pending.
+  composer_->Reset();
+  ASSERT_TRUE(composer_->InsertCharacterKeyAndPreedit("ka", "か"));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "か");
+  EXPECT_EQ(composer_->GetRawString(), "ka");
+  EXPECT_EQ(composer_->GetPendingRomanInputLength(), 1);
+  EXPECT_TRUE(composer_->IsPendingRomanInputAtCompositionStart());
+}
+
+TEST_F(ComposerTest, InsertFixedPieceConcatenates) {
+  // One syllable at a time, as Meltype produces them.
+  ASSERT_TRUE(composer_->InsertFixedPiece("ka", "か"));
+  ASSERT_TRUE(composer_->InsertFixedPiece("n", "ん"));
+  ASSERT_TRUE(composer_->InsertFixedPiece("ji", "じ"));
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "かんじ");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "かんじ");
+  EXPECT_EQ(composer_->GetRawString(), "kanji");
+  EXPECT_EQ(composer_->GetLength(), 3);
+  EXPECT_EQ(composer_->GetCursor(), 3);
+
+  // Each syllable is its own fixed chunk, so the syllable boundaries map
+  // exactly in both directions.
+  EXPECT_EQ(composer_->ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(2), 3);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(3), 5);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(2), 1);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(3), 2);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(5), 3);
+
+  // A single multi-character piece is also accepted.
+  composer_->Reset();
+  ASSERT_TRUE(composer_->InsertFixedPiece("kanji", "かんじ"));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "かんじ");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "かんじ");
+  EXPECT_EQ(composer_->GetRawString(), "kanji");
+  EXPECT_EQ(composer_->GetLength(), 3);
+}
+
+TEST_F(ComposerTest, InsertFixedPieceMixedWithNormalInput) {
+  table_->AddRule("ka", "か", "");
+  table_->AddRule("ta", "た", "");
+
+  // Fixed piece, then a normal key input.
+  ASSERT_TRUE(composer_->InsertFixedPiece("ka", "か"));
+  composer_->InsertCharacter("ta");
+  EXPECT_EQ(composer_->GetStringForPreedit(), "かた");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "かた");
+  EXPECT_EQ(composer_->GetRawString(), "kata");
+  EXPECT_EQ(composer_->GetLength(), 2);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(2), 4);
+
+  // Normal key input, then a fixed piece.
+  composer_->Reset();
+  composer_->InsertCharacter("ka");
+  ASSERT_TRUE(composer_->InsertFixedPiece("ta", "た"));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "かた");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "かた");
+  EXPECT_EQ(composer_->GetRawString(), "kata");
+  EXPECT_EQ(composer_->GetLength(), 2);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(2), 4);
+}
+
+TEST_F(ComposerTest, InsertFixedPieceRejectsEmptyKana) {
+  ASSERT_TRUE(composer_->InsertFixedPiece("ka", "か"));
+
+  EXPECT_FALSE(composer_->InsertFixedPiece("ta", ""));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "か");
+  EXPECT_EQ(composer_->GetRawString(), "ka");
+  EXPECT_EQ(composer_->GetLength(), 1);
+
+  // The max_length() guard applies to fixed pieces as well.
+  composer_->set_max_length(1);
+  EXPECT_FALSE(composer_->InsertFixedPiece("ta", "た"));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "か");
+}
+
+TEST_F(ComposerTest, InsertFixedPieceAsciiPiece) {
+  // The chunk's transliterator is pinned from `kana`, so an English piece stays
+  // half-width even though the input mode is HIRAGANA.
+  ASSERT_TRUE(composer_->InsertFixedPiece("discord", "discord"));
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "discord");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "discord");
+  EXPECT_EQ(composer_->GetRawString(), "discord");
+  EXPECT_EQ(composer_->GetLength(), 7);
+
+  // The other widths are still reachable through the transliterations.
+  transliteration::Transliterations transliterations;
+  composer_->GetTransliterations(&transliterations);
+  EXPECT_EQ(transliterations[transliteration::HALF_ASCII], "discord");
+  EXPECT_EQ(transliterations[transliteration::FULL_ASCII], "ｄｉｓｃｏｒｄ");
+
+  // Pinning is per chunk: the user's input mode is left alone.
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HIRAGANA);
+}
+
+TEST_F(ComposerTest, InsertFixedPieceDuringHalfAscii) {
+  // Mirrors what Shift+letter does: a temporary HALF_ASCII input mode.
+  composer_->SetTemporaryInputMode(transliteration::HALF_ASCII);
+  ASSERT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+
+  // An English piece is half-width here too.
+  ASSERT_TRUE(composer_->InsertFixedPiece("discord", "discord"));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "discord");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "discord");
+  EXPECT_EQ(composer_->GetRawString(), "discord");
+  EXPECT_EQ(composer_->GetLength(), 7);
+
+  // A Japanese piece keeps its kana even though the mode prefers the raw
+  // string: the chunk is pinned to HIRAGANA.
+  composer_->Reset();
+  composer_->SetTemporaryInputMode(transliteration::HALF_ASCII);
+  ASSERT_TRUE(composer_->InsertFixedPiece("ka", "か"));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "か");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "か");
+  EXPECT_EQ(composer_->GetRawString(), "ka");
+  // The user's mode is still the temporary one.
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+}
+
+TEST_F(ComposerTest, InsertFixedPieceMixedJapaneseAndEnglish) {
+  // "discord" + "で": the English piece stays half-width while the Japanese
+  // piece stays kana, which is what Meltype needs for "discordで".
+  ASSERT_TRUE(composer_->InsertFixedPiece("discord", "discord"));
+  ASSERT_TRUE(composer_->InsertFixedPiece("de", "で"));
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "discordで");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "discordで");
+  EXPECT_EQ(composer_->GetRawString(), "discordde");
+  EXPECT_EQ(composer_->GetLength(), 8);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(7), 7);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(8), 9);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(9), 8);
+
+  // The same pair in the opposite mode order gives the same display.
+  composer_->Reset();
+  composer_->SetTemporaryInputMode(transliteration::HALF_ASCII);
+  ASSERT_TRUE(composer_->InsertFixedPiece("de", "で"));
+  ASSERT_TRUE(composer_->InsertFixedPiece("discord", "discord"));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "でdiscord");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "でdiscord");
+  EXPECT_EQ(composer_->GetRawString(), "dediscord");
+}
+
+TEST_F(ComposerTest, InsertFixedPieceWithExplicitTransliterator) {
+  // The 3-argument overload pins what the caller asks for, overriding the
+  // ASCII/kanji heuristic.
+  ASSERT_TRUE(composer_->InsertFixedPiece("discord", "discord",
+                                          Transliterators::FULL_ASCII));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "ｄｉｓｃｏｒｄ");
+  EXPECT_EQ(composer_->GetRawString(), "discord");
+
+  // Transliterators::LOCAL is ignored, exactly like
+  // CharChunk::SetTransliterator, so the chunk keeps the mode's transliterator.
+  composer_->Reset();
+  ASSERT_TRUE(composer_->InsertFixedPiece("ka", "か", Transliterators::LOCAL));
+  EXPECT_EQ(composer_->GetStringForPreedit(), "か");
+}
+
+TEST_F(ComposerTest, InsertFixedPieceAtCursorInTheMiddle) {
+  ASSERT_TRUE(composer_->InsertFixedPiece("ka", "か"));
+  ASSERT_EQ(composer_->GetCursor(), 1);
+
+  // Move the cursor in front of the existing piece and insert there.
+  composer_->MoveCursorTo(0);
+  ASSERT_TRUE(composer_->InsertFixedPiece("ta", "た"));
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "たか");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "たか");
+  EXPECT_EQ(composer_->GetRawString(), "taka");
+  EXPECT_EQ(composer_->GetLength(), 2);
+  EXPECT_EQ(composer_->GetCursor(), 1);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composer_->ConvertPositionToRaw(2), 4);
+  EXPECT_EQ(composer_->ConvertPositionToComposition(2), 1);
+}
+
+TEST_F(ComposerTest, InsertFixedPieceAfterPendingChunk) {
+  table_->AddRule("ka", "か", "");
+
+  composer_->InsertCharacter("k");
+  ASSERT_EQ(composer_->GetLength(), 1);
+  ASSERT_EQ(composer_->GetRawString(), "k");
+
+  ASSERT_TRUE(composer_->InsertFixedPiece("a", "あ"));
+
+  // The pending chunk is left untouched and the fixed piece follows it, so the
+  // romaji of the pending prefix is preserved as-is.
+  EXPECT_EQ(composer_->GetRawString(), "ka");
+  EXPECT_EQ(composer_->GetLength(), 2);
+  EXPECT_EQ(composer_->GetCursor(), 2);
+  // The pending "k" is still rendered as unresolved input (widened).
+  EXPECT_EQ(composer_->GetStringForPreedit(), "ｋあ");
+}
+
+TEST_F(ComposerTest, EraseCompositionKeepsTheInputMode) {
+  // Mozc's temporary Shift+letter ASCII mode: input_mode_ is ASCII but
+  // comeback_input_mode_ still holds the user's Japanese mode.  That is the
+  // state Session::RebuildComposerWithMeltypePieces runs in.
+  composer_->SetInputMode(transliteration::HIRAGANA);
+  composer_->SetTemporaryInputMode(transliteration::HALF_ASCII);
+  ASSERT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+  ASSERT_EQ(composer_->GetComebackInputMode(), transliteration::HIRAGANA);
+  composer_->InsertCharacter("abc");
+
+  composer_->EraseComposition();
+
+  EXPECT_EQ(composer_->GetLength(), 0);
+  EXPECT_EQ(composer_->GetCursor(), 0);
+  // The run must survive the rebuild, otherwise the next lowercase letter is
+  // inserted as raw ASCII and the rest of the line is locked.
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+  EXPECT_EQ(composer_->GetComebackInputMode(), transliteration::HIRAGANA);
+
+  // Contrast: EditErase() also ends the composition, so it reverts the mode.
+  composer_->InsertCharacter("abc");
+  composer_->EditErase();
+  EXPECT_EQ(composer_->GetLength(), 0);
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HIRAGANA);
+}
+
+TEST_F(ComposerTest, InsertJapanesePieceSplitsIntoSyllables) {
+  table_->AddRule("ke", "け", "");
+  table_->AddRule("n", "ん", "");
+  table_->AddRule("sa", "さ", "");
+  table_->AddRule("ku", "く", "");
+  table_->AddRule("shi", "し", "");
+  table_->AddRule("ta", "た", "");
+
+  ASSERT_TRUE(composer_->InsertJapanesePiece("kensakushita"));
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "けんさくした");
+  EXPECT_EQ(composer_->GetQueryForConversion(), "けんさくした");
+  EXPECT_EQ(composer_->GetRawString(), "kensakushita");
+  EXPECT_EQ(composer_->GetCursor(), composer_->GetLength());
+
+  // One chunk per syllable, exactly as a real keystroke sequence produces.
+  // A single chunk holding the whole piece would keep its raw input only until
+  // the first Backspace, because the hiragana transliterator rewrites a raw
+  // input that is longer than the kana it holds.
+  EXPECT_EQ(composer_->GetLength(), 6);
+  EXPECT_EQ(composer_->GetRawString(), "kensakushita");
+
+  // Backspace must keep the keys, not replace them with kana.  It removes one
+  // syllable at a time, which is exactly the granularity real typing gives.
+  composer_->Backspace();
+  EXPECT_EQ(composer_->GetRawString(), "kensakushi");
+  EXPECT_EQ(composer_->GetStringForPreedit(), "けんさくし");
+  composer_->Backspace();
+  EXPECT_EQ(composer_->GetRawString(), "kensaku");
+  EXPECT_EQ(composer_->GetStringForPreedit(), "けんさく");
+
+  // And the whole thing still types on from there.
+  composer_->InsertCharacter("ta");
+  EXPECT_EQ(composer_->GetStringForPreedit(), "けんさくた");
+  EXPECT_EQ(composer_->GetRawString(), "kensakuta");
+}
+
+TEST_F(ComposerTest, InsertJapanesePiecePinsHiraganaWhileInTemporaryAscii) {
+  table_->AddRule("ka", "か", "");
+
+  // The rebuild runs in the middle of a word, so the composition can be in
+  // Mozc's temporary Shift+letter ASCII mode.  A chunk created in that mode
+  // would render its kana as romaji.
+  composer_->SetInputMode(transliteration::HIRAGANA);
+  composer_->SetTemporaryInputMode(transliteration::HALF_ASCII);
+
+  ASSERT_TRUE(composer_->InsertJapanesePiece("ka"));
+
+  EXPECT_EQ(composer_->GetStringForPreedit(), "か");
+  EXPECT_EQ(composer_->GetRawString(), "ka");
+  // The mode itself is left alone: pinning is per chunk.
+  EXPECT_EQ(composer_->GetInputMode(), transliteration::HALF_ASCII);
+  EXPECT_EQ(composer_->GetComebackInputMode(), transliteration::HIRAGANA);
+}
+
+TEST_F(ComposerTest, InsertJapanesePieceRejectsEmptyAndRespectsMaxLength) {
+  table_->AddRule("ka", "か", "");
+
+  EXPECT_FALSE(composer_->InsertJapanesePiece(""));
+  EXPECT_EQ(composer_->GetLength(), 0);
+
+  // max_length() is what the caller rolls back from; here it only has to be
+  // reported, not repaired.
+  composer_->set_max_length(1);
+  EXPECT_FALSE(composer_->InsertJapanesePiece("kaka"));
+}
+
 }  // namespace composer
 }  // namespace mozc

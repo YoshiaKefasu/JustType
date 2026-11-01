@@ -264,6 +264,17 @@ class Composer final {
   size_t GetCursor() const;
   void EditErase();
 
+  // Empties the composition without touching the input mode.
+  //
+  // EditErase() also resets the input mode to comeback_input_mode_, which is
+  // what ending a composition does.  A caller that rebuilds the composition in
+  // place (Session::RebuildComposerWithMeltypePieces) must not do that: it runs
+  // in the middle of the word the user is still typing, and while Mozc is in
+  // its temporary Shift+letter ASCII mode (input_mode_ is ASCII but
+  // comeback_input_mode_ still holds the user's Japanese mode) resetting the
+  // mode there ends the run early and locks the rest of the line in ASCII.
+  void EraseComposition();
+
   // Deletes a character at specified position.
   void DeleteAt(size_t pos);
   // Delete multiple characters beginning at specified position.
@@ -305,6 +316,53 @@ class Composer final {
 
   bool InsertCharacterKeyAndPreedit(absl::string_view key,
                                     absl::string_view preedit);
+
+  // Inserts a fixed piece at the cursor position: `raw` is the typed input and
+  // `kana` is the conversion generated outside of the table (e.g. by Meltype).
+  //
+  // Unlike InsertCharacterKeyAndPreedit, the inserted chunk is fixed
+  // (IsFixed() is true, i.e. it holds no pending input) and the table is not
+  // consulted, so GetRawString() keeps `raw` verbatim.
+  //
+  // The chunk's transliterator is pinned from `kana`, so the piece renders
+  // correctly whatever the current input mode is: Transliterators::HALF_ASCII
+  // when `kana` is plain ASCII (an English piece such as "discord"),
+  // Transliterators::HIRAGANA otherwise (a Japanese piece such as "か").
+  // Pinning is per chunk and never changes the user's input mode, so an
+  // English piece stays half-width in HIRAGANA mode and a Japanese piece stays
+  // kana in HALF_ASCII mode.  Use the overload below to pin explicitly.
+  //
+  // Returns false and leaves the composition unchanged when `kana` is empty
+  // or the composition already reached max_length().
+  bool InsertFixedPiece(absl::string_view raw, absl::string_view kana);
+
+  // Same as above, but pins `transliterator` on the inserted chunk instead of
+  // deriving it from `kana`.  Transliterators::LOCAL is ignored, exactly as
+  // CharChunk::SetTransliterator does.
+  bool InsertFixedPiece(absl::string_view raw, absl::string_view kana,
+                        Transliterators::Transliterator transliterator);
+
+  // Inserts one Japanese piece (romaji `raw`, e.g. "dekensakushita") through
+  // the input table, one UTF-8 character at a time.
+  //
+  // The table is what turns romaji into kana, and inserting one character at a
+  // time is what makes the table split the piece into the same per-syllable
+  // chunks a real keystroke produces.  The chunk size is not cosmetic — a fixed
+  // chunk whose raw input is longer than the kana it holds loses that raw input
+  // the first time Backspace re-splits it, because the hiragana transliterator
+  // rewrites the whole raw input to kana ("dekensakushita" -> "でけんさくし"),
+  // and the Session's Meltype decisions are made on the raw input.
+  //
+  // The chunk transliterator is pinned to HIRAGANA because the composition may
+  // be in Mozc's temporary Shift+letter ASCII mode while a Japanese word is
+  // being rebuilt; a chunk created in that mode would render its kana as
+  // romaji.
+  //
+  // Returns false when `raw` is empty or the composition reached
+  // max_length() part-way.  The caller owns the rollback in that case (see
+  // Session::RebuildComposerWithMeltypePieces).
+  bool InsertJapanesePiece(absl::string_view raw);
+
   bool InsertCharacterKeyEvent(const commands::KeyEvent& key);
   void InsertCommandCharacter(InternalCommand internal_command);
   void Delete();
@@ -325,6 +383,19 @@ class Composer final {
   // composed string.  For example, when [さ|sa][し|shi][み|mi] is the
   // composition, GetRawSubString(0, 2) returns "sashi".
   std::string GetRawSubString(size_t position, size_t size) const;
+
+  // Converts a position in the composition (the preedit string) into the
+  // corresponding position in the raw input string.  For example, when
+  // [さ|sa][し|shi][み|mi] is the composition, ConvertPositionToRaw(2) returns
+  // 5 ("sashi").
+  // See Composition::ConvertPositionToRaw for the monotonicity and clamping
+  // rules.
+  size_t ConvertPositionToRaw(size_t composition_position) const;
+
+  // Converts a position in the raw input string into the corresponding
+  // position in the composition (the preedit string).  This is the inverse
+  // direction of ConvertPositionToRaw().
+  size_t ConvertPositionToComposition(size_t raw_position) const;
 
   // Generate transliterations.
   void GetTransliterations(transliteration::Transliterations* t13ns) const;

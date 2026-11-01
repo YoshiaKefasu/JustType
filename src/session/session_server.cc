@@ -103,6 +103,17 @@ bool SessionServer::Process(absl::string_view request, std::string* response) {
     return false;
   }
 
+  // A message with a missing required field cannot be serialized at all, and the
+  // client reacts to the empty reply with the "incompatible conversion engine"
+  // error dialog.  Check before serializing so the failure is visible in the log
+  // and the client at least gets a well-formed empty response.
+  if (!command.output().IsInitialized()) {
+    LOG(ERROR) << "Output has missing required fields: "
+               << command.output().InitializationErrorString();
+    response->clear();
+    return true;
+  }
+
   if (!command.output().SerializeToString(response)) {
     LOG(WARNING) << "SerializeToString() failed";
     response->clear();

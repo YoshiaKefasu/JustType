@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <string>
 #include <utility>
@@ -60,6 +61,7 @@
 #include "session/ime_context.h"
 #include "session/key_event_transformer.h"
 #include "session/keymap.h"
+#include "meltype/language_memory.h"
 #include "session/meltype_bridge.h"
 #include "session/meltype_piece_pipeline.h"
 #include "session/systemone_client.h"
@@ -1628,6 +1630,8 @@ bool Session::SendKey(commands::Command* command) {
         command->input().key().key_string().empty()
             ? std::string("(non-text key)")
             : command->input().key().key_string();
+    // Observation only, so it runs once per keystroke after the keystroke's own
+    // state changes are complete and before the block is flushed.
     TraceStep("Display Output", TraceOutputSummary(command->output()));
     TraceFlush(absl::StrCat("Key: '", TraceText(key_text), "'"));
   }
@@ -3010,6 +3014,11 @@ bool Session::CommitCandidate(commands::Command* command) {
   }
   command->mutable_output()->set_consumed(true);
 
+  // Same capture as CommitInternal(): a candidate chosen from the window is just
+  // as much an explicit choice by the user, and it used to be the one path that
+  // never reached the memory.
+  const std::string pre_commit_raw = context_->composer().GetRawString();
+
   PushUndoContext();
 
   if (submit_passive_live_suggestion) {
@@ -3062,6 +3071,7 @@ bool Session::CommitCandidate(commands::Command* command) {
   Output(command);
   // Copy the previous output for Undo.
   *context_->mutable_output() = command->output();
+  RememberCommittedSelection(*command, pre_commit_raw);
   return true;
 }
 
@@ -3273,6 +3283,16 @@ bool Session::MaybeStartLiveConversionInternal(
     return false;
   }
 
+  // Convert what Meltype says the user typed rather than Mozc's raw romaji
+  // reading.  Done before the key and the preedit are captured so the whole
+  // live-conversion step (skip check, stable display, Convert) works on one
+  // consistent composition.
+  //
+  // key_before_rebuild is the query the pending live-conversion state was
+  // recorded from, so it is what the held suggestion has to be matched against
+  // below; live_conversion_key is the rebuilt query the converter will see.
+  const std::string key_before_rebuild = ConvertComposerQuery();
+
   const size_t length = context_->composer().GetLength();
   const std::string live_conversion_key =
       context_->composer().GetQueryForConversion();
@@ -3297,8 +3317,17 @@ bool Session::MaybeStartLiveConversionInternal(
   // window does not disappear when the delayed live conversion materializes.
   const bool use_pending_live_conversion_input =
       live_conversion_pending_ &&
-      pending_live_conversion_key_ == live_conversion_key &&
+      pending_live_conversion_key_ == key_before_rebuild &&
       pending_live_conversion_input_.type() != commands::Input::NONE;
+  // A delayed callback's own input is a SEND_COMMAND and carries none of the
+  // request/context data the keystroke had, so this is what decides whether the
+  // passive suggestion window survives the delayed live conversion.  Recorded
+  // because "the window vanished" is otherwise indistinguishable from "the
+  // engine had nothing to suggest".
+  TraceStep("Live Conversion",
+            absl::StrCat("held_suggestion_input=",
+                         use_pending_live_conversion_input ? "reused"
+                                                          : "none"));
   const commands::Input live_conversion_suggestion_input =
       use_pending_live_conversion_input ? pending_live_conversion_input_
                                         : command->input();
@@ -4397,8 +4426,17 @@ bool Session::CommitMeltypePieceLiveConversion(commands::Command* command) {
           : live_conversion_key_;
   if (key.empty()) return false;
 
+  // Enter accepts only the text already visible to the user, so this is a
+  // direct commit and must keep Mozc's Undo: without the snapshot, Ctrl+Backspace
+  // after a kana-preferring commit had nothing to restore.  The pending-display
+  // path below does the same two things.
+  PushDirectCommitUndoContext();
   ClearLiveConversionState();
   CommitStringDirectly(key, value, command);
+
+  // Undo() reads the committed result from context_->output() to build the
+  // deletion range before restoring the preedit snapshot.
+  *context_->mutable_output() = command->output();
   return true;
 }
 
@@ -5183,6 +5221,9 @@ bool Session::CommitInternal(commands::Command* command,
   }
   command->mutable_output()->set_consumed(true);
 
+  // The keys the user typed, captured before the commit clears the composer.
+  const std::string pre_commit_raw = context_->composer().GetRawString();
+
   PushUndoContext();
 
   if (context_->state() == ImeContext::COMPOSITION) {
@@ -5211,6 +5252,11 @@ bool Session::CommitInternal(commands::Command* command,
   Output(command);
   // Copy the previous output for Undo.
   *context_->mutable_output() = command->output();
+
+  // The user just chose this surface for these keys.  Remember it so the next
+  // typing of the same keys shows it first in live conversion, without the user
+  // having to open the candidate window again.
+  RememberCommittedSelection(*command, pre_commit_raw);
 
   ClearLiveConversionState();
   return true;
@@ -5355,6 +5401,41 @@ void Session::CommitRawTextDirectly(commands::Command* command) {
   CommitStringDirectly(raw_text, raw_text, command);
 }
 
+void Session::RememberCommittedSelection(const commands::Command& command,
+                                         const absl::string_view raw) {
+  if (raw.empty()) return;
+  if (!command.output().has_result()) return;
+  const commands::Result& result = command.output().result();
+  if (result.value().empty()) return;
+  mozkey::meltype::SharedLanguageMemory().RememberSelection(raw, result.value());
+  RememberCommittedEnglishWords(result.value());
+}
+
+void Session::RememberCommittedEnglishWords(const absl::string_view committed) {
+  std::size_t i = 0;
+  while (i < committed.size()) {
+    const char c = committed[i];
+    const bool letter = ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');
+    if (!letter) {
+      ++i;
+      continue;
+    }
+    const std::size_t begin = i;
+    while (i < committed.size()) {
+      const char d = committed[i];
+      if (!(('a' <= d && d <= 'z') || ('A' <= d && d <= 'Z'))) break;
+      ++i;
+    }
+    const absl::string_view run = committed.substr(begin, i - begin);
+    if (run.size() < 2) continue;
+    // A run that starts lowercase is far more likely to be a fragment of a
+    // larger surface (チャppiー の ppi) than a word the user meant in letters.
+    const char first = run.front();
+    if (!('A' <= first && first <= 'Z')) continue;
+    mozkey::meltype::SharedLanguageMemory().RememberEnglish(run);
+  }
+}
+
 void Session::CommitStringDirectly(absl::string_view key,
                                    absl::string_view preedit,
                                    commands::Command* command) {
@@ -5364,6 +5445,18 @@ void Session::CommitStringDirectly(absl::string_view key,
 
   command->mutable_output()->set_consumed(true);
   context_->mutable_converter()->Reset();
+
+  // A direct commit bypasses EngineConverter::Commit(), which is where Mozc
+  // normally teaches the user history predictor.  Without this the words this
+  // pipeline commits were never learned, so a word Mozc does not know (Kasou,
+  // チャppiー …) came back as the same wrong candidate forever: the user fixed it,
+  // and the fix was thrown away.  Learning the committed key/value pair is what
+  // Commit() would have done.
+  context_->mutable_converter()->LearnExternalConversionResult(
+      key, preedit, command->input().context());
+  // The same commit is also evidence for the segmenter: a word the user just
+  // wrote in Latin letters is a word they want in Latin letters next time.
+  RememberCommittedEnglishWords(preedit);
 
   commands::Result* result = command->mutable_output()->mutable_result();
   DCHECK(result != nullptr);
@@ -5679,10 +5772,40 @@ bool Session::ApplyMeltypePiecePreedit(const std::string& raw, bool final,
                      segment.value()});
   }
 
+  // What Mozc itself produced, before the display preference below.  The
+  // "did anything change?" test has to compare against this, not against the
+  // overlaid baseline, or a preference-only change would be discarded here.
+  const std::vector<PieceSegment> mozc_baseline = mozc_segments;
+
+  // Live conversion keeps the kana for the readings Japanese writes in kana far
+  // more often than in kanji (こと, もの, ごとに, わけ …).  Mozc converts them to
+  // the kanji entry whenever that entry is cheaper, which is why typing
+  // "listugotoni" showed リスト事に.  This is a display preference for live
+  // conversion only: Space conversion never comes through here, so the
+  // candidate list stays Mozc's own and 事 / 毎 に are still one keystroke away.
+  if (live_conversion_active_) {
+    // A surface the user already chose for exactly this reading wins over
+    // everything Mozc would pick: they picked it once, so show it first from
+    // now on without making them open the candidate window again.  The
+    // comparison is on the whole reading, so a partial match never promotes.
+    const mozkey::meltype::LanguageMemory& memory =
+        mozkey::meltype::SharedLanguageMemory();
+    if (const std::string* chosen = memory.LookupSelection(raw);
+        chosen != nullptr && !chosen->empty()) {
+      mozc_segments.assign(1, PieceSegment{std::string(raw), *chosen});
+    } else {
+      ApplyPreferKanaDisplay(MeltypeBridge::PreferKanaReadings(),
+                             &mozc_segments);
+    }
+  }
+
   const std::vector<PieceSegment> protected_segments =
       ProtectSegmentsWithPieces(mozc_segments, meltype_piece_plan_.pieces,
                                 meltype_piece_choices_);
-  if (protected_segments == mozc_segments) return false;
+  // Compare against what Mozc produced, so that a preference-only change (the
+  // kana overlay above) still counts as "the screen differs from Mozc" and the
+  // commit path reuses this text instead of committing the kanji Mozc had.
+  if (protected_segments == mozc_baseline) return false;
 
   // Same size alone does not mean the same partition: the English-boundary
   // slice can split one segment and the English collapse can merge two, so
@@ -5738,16 +5861,21 @@ bool Session::ApplyMeltypePiecePreedit(const std::string& raw, bool final,
 
   // Whether the letters on screen are letters Mozc did not produce itself:
   // "discordde" typed in kana mode converts to ぢsこrっで, and the protection
-  // above is what turns that into "discord で".  The passive suggestion
-  // window is built from Mozc's reading, so it has to be resynced in exactly
-  // that case (and only then: shift-typed ASCII already converts to itself,
-  // so Mozc's own suggestions stay usable).
-  std::string baseline_value;
+  // above is what turns that into "discord で".  The passive suggestion window
+  // is built from Mozc's reading, so it has to be resynced in exactly that case
+  // (and only then: shift-typed ASCII already converts to itself, so Mozc's own
+  // suggestions stay usable).
+  //
+  // The comparison is against the overlaid baseline (|mozc_segments|), not
+  // against what Mozc originally produced: showing ごとに where Mozc said 毎に is
+  // a display preference, not rewritten letters, and it must not replace the
+  // prediction window — the user still needs Mozc's real candidates there.
+  std::string overlay_value;
   for (const PieceSegment& segment : mozc_segments) {
-    baseline_value += segment.value;
+    overlay_value += segment.value;
   }
   meltype_display_value_ = protected_value;
-  meltype_display_rewritten_ = protected_value != baseline_value;
+  meltype_display_rewritten_ = protected_value != overlay_value;
 
   meltype_display_protected_ = true;
   return true;
@@ -6968,6 +7096,12 @@ bool Session::Convert(commands::Command* command) {
     }
   }
 
+  // Hand Mozc the Meltype-corrected composition: "discordde" must convert as
+  // "discordで", not as Mozc's raw romaji reading.  The rebuild happens in
+  // place so FillOutput(), Commit(), CommitPreedit() and CommitHead() all see
+  // the same composer and the screen can never disagree with the commit.
+  ConvertComposerQuery();
+
   if (!context_->mutable_converter()->Convert(context_->composer(),
                                               context_->client_context())) {
     LOG(ERROR) << "Conversion failed for some reasons.";
@@ -6990,6 +7124,7 @@ bool Session::ConvertWithoutHistory(commands::Command* command) {
   ConversionPreferences preferences =
       context_->converter().conversion_preferences();
   preferences.use_history = false;
+  ConvertComposerQuery();
   if (!context_->mutable_converter()->Convert(
           context_->composer(), context_->client_context(), preferences)) {
     LOG(ERROR) << "Conversion failed for some reasons.";
@@ -7331,6 +7466,7 @@ bool Session::PredictAndConvertFromLiveConversion(commands::Command* command) {
   SetSessionState(ImeContext::COMPOSITION, context_.get());
   context_->mutable_converter()->Cancel();
 
+  ConvertComposerQuery();
   if (context_->mutable_converter()->Predict(context_->composer())) {
     SetSessionState(ImeContext::CONVERSION, context_.get());
     Output(command);
@@ -7355,6 +7491,7 @@ bool Session::PredictAndConvert(commands::Command* command) {
   }
 
   command->mutable_output()->set_consumed(true);
+  ConvertComposerQuery();
   if (context_->mutable_converter()->Predict(context_->composer(),
                                              context_->client_context())) {
     SetSessionState(ImeContext::CONVERSION, context_.get());
@@ -7486,9 +7623,77 @@ void Session::OutputComposition(commands::Command* command) const {
   commands::Output* output = command->mutable_output();
   context_->converter().FillPreedit(
       context_->composer(), output->mutable_preedit());
+  ProtectComposingEnglishWord(output->mutable_preedit());
   output->set_pre_live_conversion_reading(
       output->has_preedit() &&
       ShouldExposePreLiveConversionReading(*context_));
+}
+
+void Session::ProtectComposingEnglishWord(commands::Preedit* preedit) const {
+  if (preedit == nullptr || preedit->segment_size() == 0) return;
+  // Only the composing display; a conversion result is a different surface.
+  if (context_->state() != ImeContext::COMPOSITION) return;
+
+  const std::string raw = context_->composer().GetRawString();
+  if (raw.size() < 2) return;
+  bool has_letter = false;
+  for (const char c : raw) {
+    if (('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')) {
+      has_letter = true;
+      break;
+    }
+  }
+  if (!has_letter) return;
+
+  // The whole composition has to be one English piece.  Anything else (a
+  // sentence in progress, a word followed by a particle) is left to the live
+  // conversion pipeline, which knows how to align pieces with segments.
+  const std::vector<mozkey::meltype::ScoredSegmenter::Segment> pieces =
+      MeltypeBridge::SegmentRomaji(raw, /*final=*/false);
+  if (pieces.size() != 1 || !pieces.front().is_english) return;
+
+  // Keep the segment count at one so every consumer that maps segments to the
+  // reading stays consistent.
+  //
+  // Preedit::Segment has three REQUIRED fields (commands.proto: annotation,
+  // value, value_length) and Preedit itself requires cursor.  Building a
+  // segment without them leaves the message uninitialized, so the server's
+  // SerializeToString fails and the client shows the "incompatible conversion
+  // engine" error instead of a preedit.  Every field is set explicitly here,
+  // and the result is verified before it replaces what Mozc produced.
+  const commands::Preedit original = *preedit;
+
+  const commands::Preedit::Segment::Annotation annotation =
+      original.segment_size() > 0
+          ? original.segment(0).annotation()
+          : commands::Preedit::Segment::UNDERLINE;
+  const uint32_t new_length = static_cast<uint32_t>(Util::CharsLen(raw));
+  // The old cursor counts characters of the old surface (Ｇぷ is 2 characters
+  // where GPU is 3), so an end-of-composition cursor has to follow the new
+  // length instead of being copied across.
+  const uint32_t old_length = static_cast<uint32_t>(
+      std::accumulate(original.segment().begin(), original.segment().end(),
+                      std::size_t{0},
+                      [](std::size_t sum, const commands::Preedit::Segment& s) {
+                        return sum + s.value_length();
+                      }));
+  const uint32_t new_cursor =
+      original.cursor() >= old_length ? new_length
+                                      : std::min(original.cursor(), new_length);
+
+  preedit->clear_segment();
+  commands::Preedit::Segment* segment = preedit->add_segment();
+  segment->set_annotation(annotation);
+  segment->set_value(raw);
+  segment->set_value_length(new_length);
+  segment->set_key(raw);
+  preedit->set_cursor(new_cursor);
+
+  // Fail safe: a preedit that is not fully initialized would break the wire
+  // format, so keep Mozc's own surface rather than send a broken message.
+  if (!preedit->IsInitialized()) {
+    *preedit = original;
+  }
 }
 
 void Session::OutputKey(commands::Command* command) const {
@@ -7931,6 +8136,19 @@ void Session::EndTemporaryShiftAsciiRunBeforeSpace() {
             "end temporary ASCII at a space after an English word");
 }
 
+namespace {
+
+// True when |text| is entirely ASCII, i.e. a boundary space or a symbol rather
+// than romaji the input table has to turn into kana.
+bool IsAsciiOnlyText(absl::string_view text) {
+  for (const char c : text) {
+    if (static_cast<unsigned char>(c) >= 0x80) return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 bool Session::CompositionMixesJapaneseAndEnglish(absl::string_view extra) const {
   std::string raw = context_->composer().GetRawString();
   if (raw.empty()) return false;
@@ -7946,6 +8164,84 @@ bool Session::CompositionMixesJapaneseAndEnglish(absl::string_view extra) const 
     (piece.is_english ? has_english : has_japanese) = true;
   }
   return has_japanese && has_english;
+}
+
+bool Session::RebuildComposerWithMeltypePieces(composer::Composer* composer) {
+  if (composer == nullptr) return false;
+  // Same restriction as ConvertReverse: a cursor inside the composition means
+  // the pieces no longer describe what the user is editing.
+  if (composer->GetCursor() != composer->GetLength()) return false;
+
+  const std::string raw = composer->GetRawString();
+  if (raw.empty()) return false;
+  // The dynamic program is quadratic in the buffer length.
+  if (raw.size() > MeltypeBridge::kMaxRunLength) return false;
+
+  // An empty result means Meltype has no opinion (the dictionaries are
+  // unavailable), so the caller keeps Mozc's own composition.
+  const std::vector<mozkey::meltype::ScoredSegmenter::Segment> pieces =
+      MeltypeBridge::SegmentRomaji(raw, /*final=*/false);
+  if (pieces.empty()) return false;
+
+  // Validate every piece before touching the composer, so a segment Meltype
+  // cannot express leaves the user's composition exactly as it was.
+  for (const auto& piece : pieces) {
+    if (piece.raw.empty()) return false;
+    if ((piece.is_english ? piece.raw : piece.kana).empty()) return false;
+  }
+
+  const composer::Composer backup = *composer;
+  // Not EditErase(): that also puts the input mode back to the comeback mode.
+  // That is right when a composition ends, but this rebuild runs in the middle
+  // of the word the user is still typing, so resetting the mode here would end
+  // Mozc's temporary Shift+letter ASCII run early and lock the rest of the
+  // line in ASCII.
+  composer->EraseComposition();
+  for (const auto& piece : pieces) {
+    // An English piece is pinned as a fixed chunk: its typed letters are both
+    // the raw input and the display, and the table would otherwise
+    // transliterate them into kana.
+    //
+    // A piece whose surface is plain ASCII is pinned the same way.  That is the
+    // boundary space between two English words ("Github Cli") and the odd
+    // symbol: it is not romaji, so there is nothing for the table to do, and
+    // the table would widen the space to an ideographic one.
+    //
+    // A Japanese piece is typed through the table instead, one character at a
+    // time, so the table produces the same per-syllable chunks a real keystroke
+    // would.  A single fixed chunk holding the whole piece keeps its raw input
+    // only until the first Backspace: re-splitting a fixed chunk whose raw input
+    // is longer than its kana makes the hiragana transliterator rewrite the raw
+    // input to kana ("dekensakushita" -> "でけんさくし"), and Meltype would then
+    // segment kana instead of the keys the user typed.
+    const bool pinned = piece.is_english || IsAsciiOnlyText(piece.kana);
+    const bool inserted =
+        pinned ? composer->InsertFixedPiece(
+                     piece.raw, piece.is_english ? piece.raw : piece.kana)
+               : composer->InsertJapanesePiece(piece.raw);
+    if (!inserted) {
+      *composer = backup;
+      return false;
+    }
+  }
+  TraceStep("Meltype Rebuild",
+            absl::StrCat("raw=\"", TraceText(raw), "\" pieces=", pieces.size(),
+                         " query=[", TraceText(composer->GetQueryForConversion()),
+                         "]"));
+  return true;
+}
+
+std::string Session::ConvertComposerQuery() {
+  // Taken before the rebuild: the pending live-conversion key was recorded from
+  // this same pre-rebuild composition (see MaybeScheduleLiveConversion), so the
+  // caller has to compare against this value, not against the rebuilt query.
+  const std::string before = context_->composer().GetQueryForConversion();
+  if (!RebuildComposerWithMeltypePieces(context_->mutable_composer())) {
+    // Nothing to do: Mozc's own composition stays as it is.  Recorded so a
+    // fallback is visible in the trace instead of looking like a no-op.
+    TraceStep("Meltype Rebuild", "skipped (Mozc's own composition is kept)");
+  }
+  return before;
 }
 
 bool Session::CanDirectCommitPendingLiveConversionBeforeInsert(

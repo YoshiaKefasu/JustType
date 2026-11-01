@@ -154,6 +154,7 @@ def run_wix4(args) -> None:
   meltype_english_readable = pathlib.Path(args.meltype_english_readable).resolve()
   meltype_japanese = pathlib.Path(args.meltype_japanese).resolve()
   meltype_propernouns = pathlib.Path(args.meltype_propernouns).resolve()
+  meltype_prefer_kana = pathlib.Path(args.meltype_prefer_kana).resolve()
 
   # Gen Interface JP Display ships inside the MSI so the candidate window and the
   # config dialog resolve the family on a machine that never installed it.  The
@@ -211,6 +212,7 @@ def run_wix4(args) -> None:
       '-define', f'MeltypeEnglishReadablePath={meltype_english_readable}',
       '-define', f'MeltypeJapanesePath={meltype_japanese}',
       '-define', f'MeltypeProperNounsPath={meltype_propernouns}',
+      '-define', f'MeltypePreferKanaPath={meltype_prefer_kana}',
       '-define',
       f'GenInterfaceJpDisplayRegularPath={gen_interface_jp_display_regular}',
       '-define',
@@ -254,6 +256,7 @@ def main():
   parser.add_argument('--gen_interface_jp_display_regular', type=str)
   parser.add_argument('--gen_interface_jp_display_bold', type=str)
   parser.add_argument('--meltype_propernouns', type=str)
+  parser.add_argument('--meltype_prefer_kana', type=str)
   parser.add_argument('--icon_path', type=str)
   parser.add_argument('--credit_file', type=str)
   parser.add_argument('--qt_core_dll', type=str)

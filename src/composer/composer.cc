@@ -72,6 +72,16 @@ namespace {
 using ::mozc::config::CharacterFormManager;
 using ::mozc::strings::OneCharLen;
 
+// True when |text| holds nothing but 7-bit ASCII characters.  Meltype emits an
+// English piece as ASCII and a Japanese piece as kana, so this is what tells
+// the two apart when a fixed piece's transliterator has to be chosen.
+bool IsPlainAscii(const absl::string_view text) {
+  for (const char c : text) {
+    if (static_cast<unsigned char>(c) >= 0x80) return false;
+  }
+  return true;
+}
+
 Transliterators::Transliterator GetTransliterator(
     transliteration::TransliterationType comp_mode) {
   switch (comp_mode) {
@@ -861,6 +871,71 @@ bool Composer::InsertCharacterKeyAndPreedit(const absl::string_view key,
   return ProcessCompositionInput(std::move(input));
 }
 
+bool Composer::InsertFixedPiece(const absl::string_view raw,
+                                const absl::string_view kana) {
+  const Transliterators::Transliterator transliterator =
+      IsPlainAscii(kana) ? Transliterators::HALF_ASCII
+                         : Transliterators::HIRAGANA;
+  return InsertFixedPiece(raw, kana, transliterator);
+}
+
+bool Composer::InsertFixedPiece(
+    const absl::string_view raw, const absl::string_view kana,
+    const Transliterators::Transliterator transliterator) {
+  if (kana.empty() || !EnableInsert()) {
+    return false;
+  }
+  // A new chunk inherits composition_'s input transliterator, so giving the
+  // composition the piece's one for the duration of the insertion makes the
+  // chunk render correctly from the very first call: GetLength(), the cursor
+  // and the preedit all agree, and nothing has to be re-pinned afterwards
+  // (which would leave the cursor computed from the old display length).
+  // The previous transliterator is restored so later chunks are unaffected.
+  //
+  // Transliterators::LOCAL means "keep the current one", exactly as
+  // CharChunk::SetTransliterator treats it.
+  const Transliterators::Transliterator previous = composition_.input_t12r();
+  const bool pin = transliterator != Transliterators::LOCAL;
+  if (pin) {
+    composition_.SetInputMode(transliterator);
+  }
+  position_ = composition_.InsertKeyAndFixedConversionAt(
+      position_, std::string(raw), std::string(kana));
+  if (pin) {
+    composition_.SetInputMode(previous);
+  }
+  is_new_input_ = false;
+  return true;
+}
+
+bool Composer::InsertJapanesePiece(const absl::string_view raw) {
+  if (raw.empty() || !EnableInsert()) {
+    return false;
+  }
+  // A chunk inherits composition_'s transliterator when it is created, so
+  // pinning HIRAGANA here makes every chunk this call creates render its kana.
+  // The previous transliterator is restored so later input is unaffected.
+  const Transliterators::Transliterator previous = composition_.input_t12r();
+  composition_.SetInputMode(Transliterators::HIRAGANA);
+  // One character per call, so Composition::InsertInput() re-runs
+  // GetInsertionChunk() each time and starts a new chunk whenever the previous
+  // one is fixed.  Handing the whole string to one call would run
+  // CharChunk::AddInput()'s internal loop instead, which appends every syllable
+  // to the same chunk and is what makes Backspace lose the raw input.
+  bool inserted = true;
+  for (std::size_t i = 0; i < raw.size();) {
+    if (!EnableInsert()) {
+      inserted = false;
+      break;
+    }
+    const std::size_t length = strings::OneCharLen(raw[i]);
+    InsertCharacter(std::string(raw.substr(i, length)));
+    i += length;
+  }
+  composition_.SetInputMode(previous);
+  return inserted;
+}
+
 bool Composer::InsertCharacterKeyEvent(const commands::KeyEvent& key) {
   if (!EnableInsert()) {
     return false;
@@ -974,9 +1049,13 @@ void Composer::DeleteRange(size_t pos, size_t length) {
   }
 }
 
-void Composer::EditErase() {
+void Composer::EraseComposition() {
   composition_.Erase();
   position_ = 0;
+}
+
+void Composer::EditErase() {
+  EraseComposition();
   SetInputMode(comeback_input_mode_);
 }
 
@@ -1121,6 +1200,14 @@ std::string Composer::GetRawString() const {
 std::string Composer::GetRawSubString(const size_t position,
                                       const size_t size) const {
   return common::GetRawSubString(composition_, position, size);
+}
+
+size_t Composer::ConvertPositionToRaw(const size_t composition_position) const {
+  return composition_.ConvertPositionToRaw(composition_position);
+}
+
+size_t Composer::ConvertPositionToComposition(const size_t raw_position) const {
+  return composition_.ConvertPositionToComposition(raw_position);
 }
 
 void Composer::GetTransliterations(

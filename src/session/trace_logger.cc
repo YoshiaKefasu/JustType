@@ -193,6 +193,24 @@ void TraceLogger::WriteBlock(uint64_t seq, double seq_offset_ms,
   // %LOCALAPPDATA%\Mozc path.
   ::CreateDirectoryW(ParentDirectory(wide_path).c_str(), nullptr);
 
+  // Keep the trace file from growing without bound: a long-running server writes
+  // to it for days, and it had reached well over a hundred megabytes.  Once it
+  // passes the cap, the old file is renamed to .1 (replacing any previous .1)
+  // and a fresh one is started, so there are at most two files on disk.
+  constexpr LONGLONG kMaxTraceBytes = 8LL * 1024 * 1024;
+  {
+    WIN32_FILE_ATTRIBUTE_DATA attributes = {};
+    if (::GetFileAttributesExW(wide_path.c_str(), GetFileExInfoStandard,
+                               &attributes) &&
+        attributes.nFileSizeHigh == 0 &&
+        static_cast<LONGLONG>(attributes.nFileSizeLow) >= kMaxTraceBytes) {
+      const std::wstring rotated = wide_path + L".1";
+      ::DeleteFileW(rotated.c_str());  // best effort: an open handle keeps it
+      ::MoveFileExW(wide_path.c_str(), rotated.c_str(),
+                    MOVEFILE_REPLACE_EXISTING);
+    }
+  }
+
   HANDLE file = ::CreateFileW(wide_path.c_str(), FILE_APPEND_DATA,
                               FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
                               OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);

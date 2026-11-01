@@ -81,6 +81,16 @@ void CompositionInput::InitFromRawAndConv(std::string raw,
   set_is_new_input(is_new_input);
 }
 
+void CompositionInput::InitFromRawAndFixedConversion(std::string raw,
+                                                     std::string conversion) {
+  set_raw(std::move(raw));
+  set_conversion(std::move(conversion));
+  // `is_asis` makes CharChunk::AddInputAndConvertedChar copy the pair into a
+  // chunk verbatim instead of looking it up in the table, which leaves
+  // `pending_` empty (i.e. the chunk becomes fixed).
+  is_asis_ = true;
+}
+
 void CompositionInput::Clear() {
   raw_.clear();
   conversion_.clear();

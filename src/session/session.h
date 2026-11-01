@@ -646,6 +646,19 @@ class Session {
   void CommitRawTextDirectly(commands::Command* command);
   void CommitStringDirectly(absl::string_view key, absl::string_view preedit,
                             commands::Command* command);
+
+  // Remembers the Latin words in a committed surface as English, so the
+  // segmenter treats them as English pieces next time.  Only a run that starts
+  // with a capital letter counts: "Kasou" is a word the user just wrote in
+  // letters, while the "ppi" inside "チャppiー" is a fragment of one.
+  void RememberCommittedEnglishWords(absl::string_view committed);
+
+  // Remembers what the user just committed as their choice for what they just
+  // typed.  |raw| is the composition's raw string taken *before* the commit, so
+  // the next typing of the same keys hits the same entry even when Mozc's own
+  // reading differs from the keys (GPU typed with Shift).
+  void RememberCommittedSelection(const commands::Command& command,
+                                  absl::string_view raw);
   bool CommitInternal(commands::Command* command,
                       bool trigger_zero_query_suggest);
 
@@ -740,6 +753,61 @@ class Session {
   void TraceContinue(uint64_t seq, absl::Time sequence_start);
   void TraceStep(absl::string_view name, const std::string& detail);
   void TraceFlush(const std::string& detail);
+
+  // Rebuilds |composer| in place from Meltype's pieces of its raw input: an
+  // English piece becomes one fixed chunk holding the typed letters, and a
+  // Japanese piece is typed through the input table so the table produces the
+  // same per-syllable chunks a real keystroke would.
+  //
+  // This is what makes the converter see the text the user actually typed
+  // instead of Mozc's raw romaji reading, so "discordde" converts as
+  // "discordで".  It mutates the real composer rather than handing the
+  // converter a separate shadow, because FillOutput(), Commit(),
+  // CommitPreedit() and CommitHead() all read that same composer: a shadow
+  // would make the screen and the committed text disagree.
+  //
+  // The raw input is preserved (InsertFixedPiece stores it, and the table
+  // insertion of a Japanese piece keeps it per syllable), so undo, backspace
+  // and learning keep working on the same keys.
+  //
+  // The input mode is deliberately left alone: this runs in the middle of the
+  // word the user is still typing, and Mozc's temporary Shift+letter ASCII
+  // mode must survive it (see Composer::EraseComposition).
+  //
+  // Returns false and leaves |composer| byte-for-byte unchanged when Meltype
+  // has no opinion (dictionaries unavailable, empty raw input), the raw input
+  // is longer than MeltypeBridge::kMaxRunLength, the cursor is not at the end,
+  // or a piece cannot be inserted.
+  //
+  // Callers must go through ConvertComposerQuery() rather than calling this
+  // directly; see there.
+  [[nodiscard]] bool RebuildComposerWithMeltypePieces(
+      composer::Composer* composer);
+
+  // Rebuilds the composing text right before it is handed to the converter and
+  // returns the conversion query the Composer had *before* the rebuild.
+  //
+  // Every conversion entry point calls this immediately before
+  // converter->Convert()/Predict():
+  //   Convert(), ConvertWithoutHistory(), PredictAndConvert(),
+  //   PredictAndConvertFromLiveConversion(), and
+  //   MaybeStartLiveConversionInternal() (the delayed live-conversion callback).
+  // Those are all of the places that read the composing query.  Deliberately
+  // excluded, because they operate on an existing conversion result rather than
+  // on the composing text:
+  //   ConvertNext() / ConvertReverse() (its own query, not the composition),
+  //   ConvertToTransliteration() / SwitchKanaType() / ConvertToHalfWidth()
+  //   (the F6/F7/F8 kana-type switches), Suggest() (prediction over a prefix,
+  //   which must stay Mozc's own reading so the window shows what will be
+  //   committed), and every Candidate*()/Segment*() navigation command.
+  //
+  // The pre-rebuild query is returned because the pending live-conversion key
+  // was recorded from the composition *before* any rebuild
+  // (MaybeScheduleLiveConversion runs on the keystroke; the delayed callback
+  // arrives hundreds of milliseconds later), so comparing the pending key with
+  // the rebuilt query would never match and the held suggestion window would be
+  // dropped on every delayed live conversion.
+  std::string ConvertComposerQuery();
   void CancelPendingLiveConversion();
   void ClearLiveConversionState();
   void CancelLiveConversionForEditing();
@@ -815,6 +883,17 @@ class Session {
   void MaybeUpdateCandidateActionFooter(mozc::commands::Output* output) const;
   void OutputMode(mozc::commands::Command* command) const;
   void OutputComposition(mozc::commands::Command* command) const;
+
+  // Shows an English word as the letters the user is typing, from the very
+  // first keystroke, instead of Mozc's raw transliteration of it.
+  //
+  // Live conversion already protects the pieces, but it only runs after the
+  // live-conversion delay, so a fast typist saw the raw form ("Ｇぷ") for a few
+  // hundred milliseconds.  This is the same idea applied to the composing
+  // preedit itself, and it is deliberately narrow: it fires only when the whole
+  // composition is a single English piece (a word or an acronym like GPU), so
+  // it never re-segments a sentence that is still being typed.
+  void ProtectComposingEnglishWord(commands::Preedit* preedit) const;
   void OutputKey(mozc::commands::Command* command) const;
 
   bool ExecuteCommandSequence(

@@ -11,6 +11,7 @@
 // 辞書は MELTYPE_DICT_DIR (環境変数) > このファイルの隣の dictionaries >
 // A:/Meltype/dictionaries (参照実装) の順に探す。
 
+#include "meltype/language_memory.h"
 #include "meltype/romaji_detector.h"
 #include "meltype/scored_segmenter.h"
 #include "meltype/word_list.h"
@@ -106,6 +107,42 @@ void RomajiDetectorTests() {
     }
     Check(has_variant, "SpellingVariants: " + canonical + " に " + variant + " が含まれる");
   }
+}
+
+// 確定メモリが常駐サーバーで際限なく育たないこと。
+//
+// どちらの表も書き込みのたびに丸ごと複製するので、件数が上限で頭打ちに
+// ならないと確定 1 回のコストとメモリが単調に増え続ける。
+void LanguageMemoryTests() {
+  std::cout << "\n[12] 確定メモリの上限\n";
+  constexpr std::size_t kMax = mozkey::meltype::LanguageMemory::kMaxEntries;
+  mozkey::meltype::LanguageMemory memory;
+
+  // 読みは上限より 25 件多く入れ、古い順に捨てられることを見る。
+  for (std::size_t i = 0; i < kMax + 25; ++i) {
+    memory.RememberSelection("よみ" + std::to_string(i),
+                             "表記" + std::to_string(i));
+  }
+  Check(memory.SelectionCount() == kMax, "選択履歴は上限で頭打ちになる");
+  Check(memory.LookupSelection("よみ0") == nullptr, "最も古い選択は捨てられる");
+  const std::string* newest =
+      memory.LookupSelection("よみ" + std::to_string(kMax + 24));
+  Check(newest != nullptr && *newest == "表記" + std::to_string(kMax + 24),
+        "最後に選んだ表記は残る");
+
+  // 英字の語も同じ上限。RememberEnglish は英字しか受け付けないので、
+  // 通し番号を英字 3 文字に符号化して相異なる語を作る。
+  const auto word = [](const std::size_t i) {
+    std::string w(3, 'a');
+    w[0] = static_cast<char>('a' + (i % 26));
+    w[1] = static_cast<char>('a' + ((i / 26) % 26));
+    w[2] = static_cast<char>('a' + ((i / 676) % 26));
+    return w;
+  };
+  for (std::size_t i = 0; i < kMax + 5; ++i) memory.RememberEnglish(word(i));
+  Check(memory.Count() == kMax, "英字の語も上限で頭打ちになる");
+  Check(!memory.IsEnglish(word(0)), "最も古く覚えた語は捨てられる");
+  Check(memory.IsEnglish(word(kMax + 4)), "最後に覚えた語は残る");
 }
 
 // 曖昧な語 (ローマ字としても読める英単語) のフラグが立っているか。
@@ -387,6 +424,7 @@ int main() {
   }
 
   RomajiDetectorTests();
+  LanguageMemoryTests();
 
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"
             << (g_failures == 0 ? " (すべて通った)\n" : "\n");

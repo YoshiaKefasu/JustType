@@ -63,6 +63,11 @@ class CompositionInput final {
   void InitFromRaw(std::string raw, bool is_new_input);
   void InitFromRawAndConv(std::string raw, std::string conversion,
                           bool is_new_input);
+  // Initializes with a raw string and an already fixed conversion.  Unlike
+  // InitFromRawAndConv, the pair is stored without consulting the table, so
+  // the resulting CharChunk holds no pending input (i.e. IsFixed() is true).
+  // This is used to insert a conversion generated outside of the table.
+  void InitFromRawAndFixedConversion(std::string raw, std::string conversion);
 
   void Clear();
   bool Empty() const;

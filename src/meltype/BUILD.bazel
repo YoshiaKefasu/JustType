@@ -23,6 +23,7 @@ exports_files(
         "dictionaries/english-readable.txt",
         "dictionaries/japanese.txt",
         "dictionaries/propernouns.txt",
+        "dictionaries/prefer_kana.txt",
     ],
     visibility = ["//win32/installer:__pkg__"],
 )
@@ -31,11 +32,13 @@ exports_files(
 mozc_cc_library(
     name = "meltype_segmenter",
     srcs = [
+        "language_memory.cc",
         "romaji_detector.cc",
         "scored_segmenter.cc",
         "word_list.cc",
     ],
     hdrs = [
+        "language_memory.h",
         "romaji_detector.h",
         "scored_segmenter.h",
         "word_list.h",

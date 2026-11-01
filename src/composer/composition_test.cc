@@ -65,6 +65,26 @@ std::string GetRawString(const Composition& composition) {
   return composition.GetStringWithTransliterator(Transliterators::RAW_STRING);
 }
 
+// Verifies the documented invariant that both directions of the position
+// conversion are monotonic over every position of `composition`.
+void ExpectConvertPositionIsMonotonic(const Composition& composition) {
+  const size_t composed_length = composition.GetLength();
+  for (size_t p = 1; p <= composed_length; ++p) {
+    EXPECT_LE(composition.ConvertPositionToRaw(p - 1),
+              composition.ConvertPositionToRaw(p))
+        << "composed position " << p;
+  }
+
+  // The raw strings used in this test file are ASCII, so the byte length is
+  // the character length.
+  const size_t raw_length = GetRawString(composition).size();
+  for (size_t p = 1; p <= raw_length; ++p) {
+    EXPECT_LE(composition.ConvertPositionToComposition(p - 1),
+              composition.ConvertPositionToComposition(p))
+        << "raw position " << p;
+  }
+}
+
 size_t InsertCharacters(absl::string_view input, size_t pos,
                         Composition& composition) {
   for (size_t i = 0; i < input.size(); ++i) {
@@ -697,6 +717,242 @@ TEST_F(CompositionTest, ConvertPosition) {
 
   EXPECT_EQ(chunk_it->raw(), "tto");
   EXPECT_EQ(inner_position, 3);
+}
+
+TEST_F(CompositionTest, ConvertPositionToRawAndComposition) {
+  // Empty composition: every position safely maps to 0.
+  EXPECT_EQ(composition_.ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(100), 0);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(100), 0);
+
+  // Fixed chunks only: [ね|ne][っと|tto]
+  AppendChunk("ね", "", "ne", composition_);
+  AppendChunk("っと", "", "tto", composition_);
+  ASSERT_EQ(composition_.GetLength(), 3);
+  ASSERT_EQ(GetRawString(composition_), "netto");
+
+  // composed -> raw
+  EXPECT_EQ(composition_.ConvertPositionToRaw(0), 0);  // "|ねっと" -> "|netto"
+  EXPECT_EQ(composition_.ConvertPositionToRaw(1), 2);  // "ね|っと" -> "ne|tto"
+  EXPECT_EQ(composition_.ConvertPositionToRaw(2), 3);  // "ねっ|と" -> "net|to"
+  EXPECT_EQ(composition_.ConvertPositionToRaw(3), 5);  // "ねっと|" -> "netto|"
+  // Out of range is clamped to the end of the raw string.
+  EXPECT_EQ(composition_.ConvertPositionToRaw(4), 5);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(static_cast<size_t>(-1)), 5);
+
+  // raw -> composed
+  EXPECT_EQ(composition_.ConvertPositionToComposition(0), 0);  // "|netto"
+  EXPECT_EQ(composition_.ConvertPositionToComposition(1), 1);  // "n|etto"
+  EXPECT_EQ(composition_.ConvertPositionToComposition(2), 1);  // "ne|tto"
+  EXPECT_EQ(composition_.ConvertPositionToComposition(3), 2);  // "net|to"
+  EXPECT_EQ(composition_.ConvertPositionToComposition(4), 3);  // "nett|o"
+  EXPECT_EQ(composition_.ConvertPositionToComposition(5), 3);  // "netto|"
+  // Out of range is clamped to the end of the composition.
+  EXPECT_EQ(composition_.ConvertPositionToComposition(6), 3);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(static_cast<size_t>(-1)),
+            3);
+}
+
+TEST_F(CompositionTest, ConvertPositionWithPendingChunks) {
+  // Mixed fixed and pending chunks.
+  //   [あ|a] [ky|ky] [き|ki] [った|tta] [っty|tty]
+  //   composed = "あkyきったっty" (9 chars)
+  //   raw      = "akykittatty"   (11 chars)
+  InitComposition(composition_);
+  ASSERT_EQ(composition_.GetLength(), 9);
+  ASSERT_EQ(GetRawString(composition_), "akykittatty");
+
+  // composed -> raw
+  EXPECT_EQ(composition_.ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(1), 1);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(2), 2);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(3), 3);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(4), 5);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(5), 6);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(6), 8);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(7), 9);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(8), 10);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(9), 11);
+  // Out of range is clamped to the end of the raw string.
+  EXPECT_EQ(composition_.ConvertPositionToRaw(10), 11);
+
+  // raw -> composed
+  EXPECT_EQ(composition_.ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(1), 1);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(2), 2);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(3), 3);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(4), 4);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(5), 4);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(6), 5);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(7), 6);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(8), 6);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(9), 7);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(10), 8);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(11), 9);
+  // Out of range is clamped to the end of the composition.
+  EXPECT_EQ(composition_.ConvertPositionToComposition(12), 9);
+}
+
+TEST_F(CompositionTest, ConvertPositionRoundTripAtChunkBoundaries) {
+  InitComposition(composition_);
+
+  // A chunk boundary must survive the round trip in both directions.
+  static constexpr size_t kComposedBoundaries[] = {0, 1, 3, 4, 6, 9};
+  for (const size_t composed : kComposedBoundaries) {
+    const size_t raw = composition_.ConvertPositionToRaw(composed);
+    EXPECT_EQ(composition_.ConvertPositionToComposition(raw), composed)
+        << "composed=" << composed;
+  }
+
+  static constexpr size_t kRawBoundaries[] = {0, 1, 3, 5, 8, 11};
+  for (const size_t raw : kRawBoundaries) {
+    const size_t composed = composition_.ConvertPositionToComposition(raw);
+    EXPECT_EQ(composition_.ConvertPositionToRaw(composed), raw)
+        << "raw=" << raw;
+  }
+}
+
+TEST_F(CompositionTest, ConvertPositionWithChunkWithoutRawInput) {
+  // A chunk that has a conversion but no raw input (e.g. a handwriting
+  // composition) must collapse onto its boundary instead of producing a bogus
+  // position.
+  AppendChunk("あ", "", "a", composition_);
+  AppendChunk("ん", "", "", composition_);
+  AppendChunk("い", "", "i", composition_);
+  ASSERT_EQ(composition_.GetLength(), 3);
+  ASSERT_EQ(GetRawString(composition_), "ai");
+
+  // composed -> raw: the raw-less chunk collapses to "a|" and "|i".
+  EXPECT_EQ(composition_.ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(1), 1);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(2), 1);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(3), 2);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(4), 2);
+
+  // raw -> composed: the raw-less chunk collapses onto the "あ|" boundary and
+  // is skipped over when the raw position moves past it.
+  EXPECT_EQ(composition_.ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(1), 1);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(2), 3);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(3), 3);
+}
+
+TEST_F(CompositionTest, ConvertPositionWithTrailingChunkWithoutRawInput) {
+  // The trailing chunk carries no raw input: [あ|a][ん|].
+  AppendChunk("あ", "", "a", composition_);
+  AppendChunk("ん", "", "", composition_);
+  ASSERT_EQ(composition_.GetLength(), 2);
+  ASSERT_EQ(GetRawString(composition_), "a");
+
+  EXPECT_EQ(composition_.ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(1), 1);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(2), 1);
+
+  EXPECT_EQ(composition_.ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(1), 1);
+  // An out-of-range raw position is clamped to the composed position that
+  // corresponds to the end of the raw string.  It is NOT GetLength() here
+  // because the trailing chunk has no raw input.
+  EXPECT_EQ(composition_.ConvertPositionToComposition(2), 1);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(5), 1);
+}
+
+TEST_F(CompositionTest, ConvertPositionIsMonotonic) {
+  // Fixed and pending chunks mixed.
+  InitComposition(composition_);
+  ExpectConvertPositionIsMonotonic(composition_);
+
+  // Raw-less chunks in the middle and at the tail.
+  AppendChunk("あ", "", "a", composition_);
+  AppendChunk("ん", "", "", composition_);
+  AppendChunk("い", "", "i", composition_);
+  ExpectConvertPositionIsMonotonic(composition_);
+
+  AppendChunk("う", "", "", composition_);
+  ExpectConvertPositionIsMonotonic(composition_);
+}
+
+TEST_F(CompositionTest, InsertKeyAndFixedConversionAt) {
+  size_t pos = 0;
+  pos = composition_.InsertKeyAndFixedConversionAt(pos, "ka", "か");
+  EXPECT_EQ(pos, 1);
+  pos = composition_.InsertKeyAndFixedConversionAt(pos, "n", "ん");
+  EXPECT_EQ(pos, 2);
+  pos = composition_.InsertKeyAndFixedConversionAt(pos, "ji", "じ");
+  EXPECT_EQ(pos, 3);
+
+  EXPECT_EQ(composition_.GetString(), "かんじ");
+  EXPECT_EQ(GetRawString(composition_), "kanji");
+
+  // Every inserted piece becomes its own fixed chunk, i.e. the conversion is
+  // stored in `conversion` and nothing is left pending.
+  const CharChunkList& chunks = composition_.GetCharChunkList();
+  ASSERT_EQ(chunks.size(), 3);
+  auto it = chunks.begin();
+  EXPECT_TRUE(it->IsFixed());
+  EXPECT_EQ(it->raw(), "ka");
+  EXPECT_EQ(it->conversion(), "か");
+  EXPECT_TRUE(it->pending().empty());
+  ++it;
+  EXPECT_TRUE(it->IsFixed());
+  EXPECT_EQ(it->raw(), "n");
+  EXPECT_EQ(it->conversion(), "ん");
+  EXPECT_TRUE(it->pending().empty());
+  ++it;
+  EXPECT_TRUE(it->IsFixed());
+  EXPECT_EQ(it->raw(), "ji");
+  EXPECT_EQ(it->conversion(), "じ");
+  EXPECT_TRUE(it->pending().empty());
+}
+
+TEST_F(CompositionTest, InsertKeyAndFixedConversionAtBeginning) {
+  size_t pos = composition_.InsertKeyAndFixedConversionAt(0, "ta", "た");
+  ASSERT_EQ(pos, 1);
+
+  // Inserting at 0 puts the new piece in front of the existing chunk.
+  pos = composition_.InsertKeyAndFixedConversionAt(0, "ka", "か");
+  EXPECT_EQ(pos, 1);
+  EXPECT_EQ(composition_.GetString(), "かた");
+  EXPECT_EQ(GetRawString(composition_), "kata");
+  EXPECT_EQ(composition_.GetLength(), 2);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(2), 4);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(2), 1);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(4), 2);
+}
+
+TEST_F(CompositionTest, InsertKeyAndFixedConversionAtWithEmptyConversion) {
+  const size_t pos = composition_.InsertKeyAndFixedConversionAt(0, "ka", "か");
+  ASSERT_EQ(pos, 1);
+
+  // An empty conversion cannot be stored as a fixed chunk, so nothing is
+  // inserted and the position is left untouched.
+  EXPECT_EQ(composition_.InsertKeyAndFixedConversionAt(pos, "ta", ""), pos);
+  EXPECT_EQ(composition_.GetString(), "か");
+  EXPECT_EQ(GetRawString(composition_), "ka");
+  EXPECT_EQ(composition_.GetLength(), 1);
+}
+
+TEST_F(CompositionTest, ConvertPositionOnFixedChunks) {
+  size_t pos = 0;
+  pos = composition_.InsertKeyAndFixedConversionAt(pos, "ka", "か");
+  pos = composition_.InsertKeyAndFixedConversionAt(pos, "n", "ん");
+  pos = composition_.InsertKeyAndFixedConversionAt(pos, "ji", "じ");
+  ASSERT_EQ(composition_.GetLength(), 3);
+  ASSERT_EQ(GetRawString(composition_), "kanji");
+
+  // Syllable boundaries map exactly in both directions.
+  EXPECT_EQ(composition_.ConvertPositionToRaw(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(1), 2);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(2), 3);
+  EXPECT_EQ(composition_.ConvertPositionToRaw(3), 5);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(0), 0);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(2), 1);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(3), 2);
+  EXPECT_EQ(composition_.ConvertPositionToComposition(5), 3);
+
+  ExpectConvertPositionIsMonotonic(composition_);
 }
 
 TEST_F(CompositionTest, SetDisplayMode) {

@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "meltype/romaji_detector.h"
@@ -38,6 +39,12 @@ struct MeltypeDictionaries {
   WordList spell;
   // 日本語の語 (japanese.txt)。綴りの揺れ (si/shi, tu/tsu …) を展開して登録する。
   WordList japanese;
+  // ライブ変換でかなのまま見せる読み (prefer_kana.txt)。JPDB の頻度ランクで、
+  // かな表記が同じ読みのどの漢字表記よりも頻出のものだけが入る。
+  //
+  // WordList ではなく素の集合なのは、WordList::AddText が英小文字しか受け付け
+  // ないから (ひらがなは登録できない)。
+  std::unordered_set<std::string> prefer_kana;
 
   // 指定のディレクトリから読む。無いファイルは無視するので、必要な分だけ置けばよい。
   // 戻り値は読めた語数の合計。

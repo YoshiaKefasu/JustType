@@ -24,6 +24,7 @@
 
 #include <cstddef>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "meltype/scored_segmenter.h"
@@ -256,6 +257,24 @@ std::vector<PieceSegment> ProtectSegmentsWithPieces(
     const std::vector<PieceSegment>& mozc_segments,
     const std::vector<mozkey::meltype::ScoredSegmenter::Segment>& pieces,
     const std::vector<std::string>& choices);
+
+// Replaces the surface of the segments whose reading Japanese writes in kana
+// far more often than in kanji, so live conversion shows ごとに instead of
+// 毎に and すること instead of する事.
+//
+// |prefer_kana| is the reading set derived from JPDB frequency ranks
+// (meltype/dictionaries/prefer_kana.txt).  Only the value changes: the key,
+// the segment count and the boundaries stay exactly as Mozc produced them, so
+// the reading-range alignment in ProtectSegmentsWithPieces() still matches.
+//
+// This is a live-conversion display preference, not a conversion rule.  The
+// caller applies it only while live conversion is active; Space conversion
+// never sees it, so Mozc's own candidates (毎に, 事) stay one keystroke away.
+//
+// Returns how many segments were changed.
+std::size_t ApplyPreferKanaDisplay(
+    const std::unordered_set<std::string>& prefer_kana,
+    std::vector<PieceSegment>* segments);
 
 }  // namespace session
 }  // namespace mozc

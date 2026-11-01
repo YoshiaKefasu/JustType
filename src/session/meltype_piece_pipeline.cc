@@ -548,5 +548,20 @@ std::vector<PieceSegment> ProtectSegmentsWithPieces(
   return out;
 }
 
+std::size_t ApplyPreferKanaDisplay(
+    const std::unordered_set<std::string>& prefer_kana,
+    std::vector<PieceSegment>* segments) {
+  if (segments == nullptr || prefer_kana.empty()) return 0;
+  std::size_t changed = 0;
+  for (PieceSegment& segment : *segments) {
+    if (segment.key.empty()) continue;
+    if (segment.value == segment.key) continue;  // already kana
+    if (prefer_kana.find(segment.key) == prefer_kana.end()) continue;
+    segment.value = segment.key;
+    ++changed;
+  }
+  return changed;
+}
+
 }  // namespace session
 }  // namespace mozc

@@ -63,6 +63,7 @@ Gitlab
 Golang
 Goodreads
 Google
+GPU
 Graphql
 Greek
 Gtk
@@ -177,6 +178,7 @@ Svelte
 Swedish
 Swift
 Tab
+Tauri
 Telegram
 Tensorflow
 Tesla

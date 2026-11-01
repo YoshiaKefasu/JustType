@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "base/system_util.h"
+#include "meltype/language_memory.h"
 #include "meltype/scored_segmenter.h"
 
 namespace mozc {
@@ -218,11 +219,21 @@ bool IsAcronym(const std::string_view raw) {
 // ScoredSegmenter judges English with, so a spelling Meltype treats as English
 // here is English there too.
 bool MeltypeBridge::IsEnglishWord(const std::string_view lower) {
+  // A word the user committed in Latin letters is English even when no bundled
+  // list holds it (Kasou, チャppiー).  This is checked before the dictionary
+  // because it has to work without one too.
+  if (mozkey::meltype::SharedLanguageMemory().IsEnglish(lower)) return true;
   if (GetSegmenter() == nullptr) return false;  // no dictionaries: no opinion
   return dictionaries_->english.ContainsWord(lower) ||
          dictionaries_->proper.ContainsWord(lower) ||
          dictionaries_->spell.ContainsWord(lower) ||
          dictionaries_->readable.ContainsWord(lower);
+}
+
+const std::unordered_set<std::string>& MeltypeBridge::PreferKanaReadings() {
+  static const std::unordered_set<std::string> kEmpty;
+  if (GetSegmenter() == nullptr) return kEmpty;  // no dictionaries: no opinion
+  return dictionaries_->prefer_kana;
 }
 
 bool MeltypeBridge::HasNonCompoundContinuation(const std::string_view prefix,
@@ -279,7 +290,6 @@ bool MeltypeBridge::EndsTemporaryShiftAsciiRun(const std::string_view raw,
   // sentence followed by English unrecoverable).
   const std::string run = ShiftedWord(raw);
   if (run.empty()) return true;
-  constexpr std::size_t kMaxRunLength = 64;
   if (run.size() > kMaxRunLength) return false;
 
   const std::string stem = ToLowerAscii(run);

@@ -107,6 +107,7 @@ class SessionTestPeer : testing::TestPeer<Session> {
   PEER_METHOD(AttachCachedLiveConversionSuggestionCandidateWindow);
   PEER_METHOD(ApplyMeltypePiecePreedit);
   PEER_METHOD(CommitMeltypePieceLiveConversion);
+  PEER_METHOD(RebuildComposerWithMeltypePieces);
 
   PEER_VARIABLE(context_);
   PEER_VARIABLE(undo_contexts_);
@@ -1142,6 +1143,62 @@ TEST_F(SessionTest, LiveConversionUsesDefaultMinKeyLength) {
   EXPECT_FALSE(command.output().live_conversion_pending());
   EXPECT_TRUE(command.output().pre_live_conversion_reading());
   EXPECT_TRUE(EnsurePreedit("あ", command));
+}
+
+// The rebuild is the last thing that happens before the converter reads the
+// composition, so every way it can decline has to leave the composition exactly
+// as Mozc built it.  This suite points MeltypeBridge at a directory that does
+// not exist, so the "Meltype has no opinion" path is the reachable one here;
+// the rollback after a failed piece insertion needs the real dictionaries and
+// is covered by session_e2e_test.
+TEST_F(SessionTest, RebuildComposerWithMeltypePiecesDeclinesWithoutTouching) {
+  MockEngine engine;
+  std::shared_ptr<MockConverter> converter = CreateEngineConverterMock(&engine);
+
+  Session session(engine);
+  InitSessionToPrecomposition(&session);
+  SessionTestPeer peer(session);
+  composer::Composer* composer = peer.context_()->mutable_composer();
+
+  // No composer at all.
+  EXPECT_FALSE(peer.RebuildComposerWithMeltypePieces(nullptr));
+
+  // Empty composition.
+  EXPECT_FALSE(peer.RebuildComposerWithMeltypePieces(composer));
+  EXPECT_EQ(composer->GetLength(), 0);
+
+  commands::Command command;
+  InsertCharacterString("あ", "a", &session, &command);
+  InsertCharacterString("い", "i", &session, &command);
+  const std::string raw = composer->GetRawString();
+  const size_t length = composer->GetLength();
+  const size_t cursor = composer->GetCursor();
+  const transliteration::TransliterationType mode = composer->GetInputMode();
+  ASSERT_EQ(raw, "ai");
+
+  // Meltype has no opinion (no dictionaries): the composition stays as Mozc
+  // built it, byte for byte.
+  EXPECT_FALSE(peer.RebuildComposerWithMeltypePieces(composer));
+  EXPECT_EQ(composer->GetRawString(), raw);
+  EXPECT_EQ(composer->GetLength(), length);
+  EXPECT_EQ(composer->GetCursor(), cursor);
+  EXPECT_EQ(composer->GetInputMode(), mode);
+
+  // A cursor inside the composition means the pieces no longer describe what
+  // the user is editing, so nothing is rebuilt.
+  composer->MoveCursorLeft();
+  EXPECT_FALSE(peer.RebuildComposerWithMeltypePieces(composer));
+  EXPECT_EQ(composer->GetRawString(), raw);
+  EXPECT_EQ(composer->GetCursor(), cursor - 1);
+  composer->MoveCursorToEnd();
+
+  // A buffer longer than Meltype's dynamic program is willing to segment is
+  // left alone rather than truncated.
+  composer->InsertCharacter(std::string(70, 'a'));
+  const std::string long_raw = composer->GetRawString();
+  ASSERT_GT(long_raw.size(), 64u);
+  EXPECT_FALSE(peer.RebuildComposerWithMeltypePieces(composer));
+  EXPECT_EQ(composer->GetRawString(), long_raw);
 }
 
 TEST_F(SessionTest, LiveConversionAllowsSingleCharacterWhenMinKeyLengthIsOne) {

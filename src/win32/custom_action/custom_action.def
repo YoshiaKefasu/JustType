@@ -19,3 +19,4 @@ EXPORTS
     FixupConfigFilePermission
     WriteApValue
     WriteApValueRollback
+    LogOffCurrentUser

@@ -108,6 +108,16 @@ class Composition final {
   size_t InsertAt(size_t position, std::string input);
   size_t InsertKeyAndPreeditAt(size_t position, std::string key,
                                std::string preedit);
+  // Inserts `key` as the raw input and `conversion` as an already fixed
+  // conversion at the given `position`, and returns the new position.
+  //
+  // Unlike InsertKeyAndPreeditAt, the inserted CharChunk is fixed (IsFixed()
+  // is true, i.e. it holds no pending input) and the table is not consulted,
+  // so a conversion generated outside of the table (e.g. by Meltype) is kept
+  // as-is while `key` stays available as the raw input.  Does nothing and
+  // returns `position` when `conversion` is empty.
+  size_t InsertKeyAndFixedConversionAt(size_t position, std::string key,
+                                       std::string conversion);
   // Insert the given |input| to the composition at the given |position|
   // and return the new position.
   size_t InsertInput(size_t position, CompositionInput input);
@@ -119,6 +129,28 @@ class Composition final {
   size_t ConvertPosition(
       size_t position_from, Transliterators::Transliterator transliterator_from,
       Transliterators::Transliterator transliterator_to) const;
+
+  // Converts a position in the composed string, i.e. the preedit string
+  // returned by GetString(), into the corresponding position in the raw input
+  // string, i.e. the string returned by
+  // GetStringWithTransliterator(Transliterators::RAW_STRING).
+  //
+  // The mapping is monotonic but not necessarily bijective: a CharChunk that
+  // holds no raw input (e.g. a handwriting composition) collapses onto its
+  // boundary.  A position past the end of the composed string is clamped to
+  // the end of the raw string, i.e. to the raw string length.  Returns 0 when
+  // the composition is empty.
+  size_t ConvertPositionToRaw(size_t composition_position) const;
+
+  // Converts a position in the raw input string into the corresponding
+  // position in the composed string.  This is the inverse direction of
+  // ConvertPositionToRaw() and keeps the same monotonicity.
+  //
+  // A position past the end of the raw string is clamped to the composed
+  // position that corresponds to the end of the raw string.  That position
+  // equals GetLength() only when the trailing CharChunk carries raw input;
+  // for [あ|a][ん|] the clamp stops at 1 while GetLength() is 2.
+  size_t ConvertPositionToComposition(size_t raw_position) const;
 
   // TODO(komatsu): To be deleted.
   size_t SetDisplayMode(size_t position,

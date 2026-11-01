@@ -69,6 +69,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -82,17 +83,39 @@
 #include "protocol/commands.pb.h"
 #include "protocol/config.pb.h"
 #include "renderer/win32/win32_font_resource.h"
+#include "meltype/language_memory.h"
 #include "session/meltype_bridge.h"
 #include "session/meltype_piece_pipeline.h"
 #include "session/session.h"
 #include "session/systemone_client.h"
 #include "session/systemone_logger.h"
+#include "session/trace_logger.h"
+#include "testing/test_peer.h"
 #include "transliteration/transliteration.h"
 
 // This test is Windows-only (see the target_compatible_with in
 // session/BUILD.bazel): it drives the real SystemOne WinHTTP client and the real
 // GDI font registration, both of which exist only there.
 #include <windows.h>
+
+namespace mozc {
+namespace session {
+
+// The rebuild's rollback path can only be reached by shrinking the Composer's
+// max_length() after the keys are in, which no public Session API does.  Kept
+// here rather than in session_test.cc because the rebuild needs the real
+// dictionaries to get past its "Meltype has no opinion" gate.
+class SessionTestPeer : public testing::TestPeer<Session> {
+ public:
+  explicit SessionTestPeer(Session& session)
+      : testing::TestPeer<Session>(session) {}
+
+  PEER_METHOD(RebuildComposerWithMeltypePieces);
+  PEER_VARIABLE(context_);
+};
+
+}  // namespace session
+}  // namespace mozc
 
 namespace {
 
@@ -123,6 +146,8 @@ using mozkey::meltype::ScoredSegmenter;
 
 int g_checks = 0;
 int g_failures = 0;
+// 環境依存で検証自体を行わなかった件数。PASS には数えないが、失敗でもない。
+int g_skips = 0;
 
 void Report(bool ok, const std::string& what, const std::string& detail) {
   ++g_checks;
@@ -140,6 +165,13 @@ void ReportEq(const std::string& what, const std::string& expected,
               const std::string& actual) {
   Report(expected == actual, what, "expected=[" + expected + "] actual=[" +
                                       actual + "]");
+}
+
+// 環境依存で検証を行わなかった場合。PASS でも FAIL でもなく、サマリで別に数える。
+void ReportSkip(const std::string& what, const std::string& detail) {
+  ++g_skips;
+  std::cout << "  SKIP  " << what << (detail.empty() ? "" : ": " + detail)
+            << "\n";
 }
 
 // ワイド文字列を UTF-8 に直して比較する (パス解決の検証用)。
@@ -464,6 +496,103 @@ std::vector<std::string> RegisteredPrecompositionCommands(
   return names;
 }
 
+// ---------------------------------------------------------------------------
+// A Session wired the way the product runs it, plus the Command reused for
+// every keystroke.  The engine has to outlive the Session, so both live here.
+// ---------------------------------------------------------------------------
+struct SessionRig {
+  std::unique_ptr<Engine> engine;
+  std::unique_ptr<Session> session;
+  Command command;
+};
+
+// |live_conversion| leaves the default delay in place, so a keystroke schedules
+// a delayed callback instead of converting immediately; ApplyDelayedLiveConversion
+// then delivers it the way the client does when the delay elapses.
+std::unique_ptr<SessionRig> MakeSessionRig(bool live_conversion) {
+  absl::StatusOr<std::unique_ptr<Engine>> engine_or =
+      MockDataEngineFactory::Create();
+  if (!engine_or.ok()) return nullptr;
+
+  auto rig = std::make_unique<SessionRig>();
+  rig->engine = std::move(*engine_or);
+  rig->session = std::make_unique<Session>(*rig->engine);
+
+  Config config;
+  ConfigHandler::GetDefaultConfig(&config);
+  config.set_shift_key_mode_switch(Config::ASCII_INPUT_MODE);
+  config.set_preedit_method(Config::ROMAN);
+  config.set_use_live_conversion(live_conversion);
+  config.set_use_dictionary_suggest(false);
+  rig->session->SetConfig(config);
+
+  Request request;
+  rig->session->SetRequest(request);
+  std::shared_ptr<Table> table = std::make_shared<Table>();
+  table->InitializeWithRequestAndConfig(request, config);
+  rig->session->SetTable(table);
+
+  rig->session->IMEOn(&rig->command);
+  return rig;
+}
+
+void SendKeyCode(SessionRig* rig, uint32_t key_code) {
+  rig->command.Clear();
+  mozc::commands::Input* input = rig->command.mutable_input();
+  input->set_type(mozc::commands::Input::SEND_KEY);
+  input->mutable_key()->set_key_code(key_code);
+  rig->session->SendKey(&rig->command);
+}
+
+void SendSpecialKey(SessionRig* rig, KeyEvent::SpecialKey special_key) {
+  rig->command.Clear();
+  mozc::commands::Input* input = rig->command.mutable_input();
+  input->set_type(mozc::commands::Input::SEND_KEY);
+  input->mutable_key()->set_special_key(special_key);
+  rig->session->SendKey(&rig->command);
+}
+
+// Types one character at a time, exactly as a keyboard would.  The case of
+// |keys| is meaningful: an uppercase letter is what puts the Composer into
+// Mozc's temporary Shift+letter ASCII mode.
+void TypeKeys(SessionRig* rig, const std::string& keys) {
+  for (const char key : keys) {
+    if (key == ' ') {
+      // A space arrives as special_key = SPACE (the keymap binds that to
+      // InsertSpace); a raw key_code 32 is not a table entry and would be
+      // dropped.
+      SendSpecialKey(rig, KeyEvent::SPACE);
+      continue;
+    }
+    SendKeyCode(rig, static_cast<uint32_t>(static_cast<unsigned char>(key)));
+  }
+}
+
+// Delivers the delayed live-conversion callback the last keystroke scheduled.
+// Returns false when no callback was attached.
+bool ApplyDelayedLiveConversion(SessionRig* rig) {
+  if (!rig->command.output().has_callback()) return false;
+  const mozc::commands::SessionCommand session_command =
+      rig->command.output().callback().session_command();
+  rig->command.Clear();
+  mozc::commands::Input* input = rig->command.mutable_input();
+  input->set_type(mozc::commands::Input::SEND_COMMAND);
+  *input->mutable_command() = session_command;
+  rig->session->SendCommand(&rig->command);
+  return true;
+}
+
+// The preedit the client would draw, concatenated.
+std::string PreeditText(const Command& command) {
+  std::string text;
+  if (command.output().has_preedit()) {
+    for (const auto& segment : command.output().preedit().segment()) {
+      text += segment.value();
+    }
+  }
+  return text;
+}
+
 }  // namespace
 
 int main() {
@@ -471,6 +600,11 @@ int main() {
   // Stage 2 setup: the real dictionaries.
   // -----------------------------------------------------------------------
   const std::string dictionary_directory = DictionaryDirectory();
+  // Point MeltypeBridge at the same directory.  The bridge resolves its own
+  // path from the install location (or this variable), which a test run has
+  // neither of, so without this the bridge would load nothing and every
+  // Meltype-driven decision would silently do nothing here.
+  _putenv_s("MOZKEY_MELTYPE_DICT_DIR", dictionary_directory.c_str());
   mozkey::meltype::MeltypeDictionaries dictionaries;
   const std::size_t loaded = mozkey::meltype::MeltypeDictionaries::LoadFromDirectory(
       dictionary_directory, dictionaries);
@@ -2249,6 +2383,13 @@ int main() {
         // 数字・記号を含む IT トークン。
         {"S3baketto", "S3ばけっと", "識別子 S3 + ばけっと"},
         {"C++gengo", "C++げんご", "識別子 C++ + げんご"},
+        // 英単語の末尾 'd' と助詞「で」の衝突。辞書にある taurid を最長一致で
+        // 取ると「Tauridえできます」になるので、'd' を日本語側に譲る。
+        {"Tauridedekimasu", "Tauriでできます",
+         "d + e の衝突: Tauri + でできます"},
+        // いろは をかな優先から外したので、色は が文節として残る。
+        {"haikeiirohamadatsuitemasu", "はいけいいろはまだついてます",
+         "いろは を強制ひらがなにしない"},
     };
 
     for (const MixedCase& mixed : mixed_cases) {
@@ -2424,7 +2565,482 @@ int main() {
   }
 
   // -----------------------------------------------------------------------
+  // [10] ライブ変換のかな優先表示
+  // -----------------------------------------------------------------------
+  // Mozc は「ごとに」を 毎に、「こと」を 事 に変換する。JPDB の頻度ランクで
+  // かな表記の方が優勢な読みは、ライブ変換のプレディットだけ かな のまま
+  // 見せる (Space の手動変換は Mozc の候補をそのまま出すので、漢字を選びたい
+  // ときは今までどおり選べる)。
+  std::cout << "\n[10] ライブ変換のかな優先表示\n";
+  {
+    const std::unordered_set<std::string>& prefer_kana =
+        MeltypeBridge::PreferKanaReadings();
+    std::cout << "     prefer_kana: e2e=" << dictionaries.prefer_kana.size()
+              << " bridge=" << prefer_kana.size() << "\n";
+    Report(!prefer_kana.empty(), "かな優先リスト (prefer_kana.txt) が読める",
+           "空。ビルドツリーの meltype/dictionaries を見直すこと");
+    for (const char* reading : {"こと", "もの", "ごとに", "わけ", "する"}) {
+      Report(prefer_kana.count(reading) == 1,
+             absl::StrCat("かな優先リストに ", reading, " がある"), "");
+    }
+    // いろは は入れない。「背景色はまだ」の「色は」を「いろは」に潰さないため。
+    Report(prefer_kana.count("いろは") == 0,
+           "かな優先リストに いろは は無い", "");
+
+    // リストごとに: Mozc のベースラインは リスト + 毎に。
+    const std::vector<PieceSegment> mozc_baseline = {{"りすと", "リスト"},
+                                                     {"ごとに", "毎に"}};
+    std::vector<PieceSegment> live = mozc_baseline;
+    const std::size_t changed = ApplyPreferKanaDisplay(prefer_kana, &live);
+    ReportEq("リストごとに: ライブ変換のプレディット", "リストごとに",
+             JoinProtectedValues(live));
+    Report(changed == 1,
+           "リストごとに: 置き換わるのは ごとに の 1 区間だけ",
+           absl::StrCat("changed=", changed));
+    // Space が見るのは Mozc のベースラインのまま。ここが漢字のままである
+    // ことが、「手動変換では漢字を選べる」の根拠。
+    ReportEq("リストごとに: Space の候補は Mozc の漢字のまま", "リスト毎に",
+             JoinProtectedValues(mozc_baseline));
+
+    // 〜すること: する + 事 → する + こと。
+    std::vector<PieceSegment> suru = {{"する", "為る"}, {"こと", "事"}};
+    ApplyPreferKanaDisplay(prefer_kana, &suru);
+    ReportEq("〜すること: ライブ変換のプレディット", "すること",
+             JoinProtectedValues(suru));
+
+    // リストに無い読みは Mozc の漢字のまま (何も壊さない)。
+    std::vector<PieceSegment> kanji = {{"かんじ", "漢字"}, {"へんかん", "変換"}};
+    const std::size_t untouched = ApplyPreferKanaDisplay(prefer_kana, &kanji);
+    ReportEq("リストに無い読みは漢字のまま", "漢字変換",
+             JoinProtectedValues(kanji));
+    Report(untouched == 0, "リストに無い読みは置き換えない",
+           absl::StrCat("changed=", untouched));
+
+    // すでにかなの区間 (助詞など) は触らない。
+    std::vector<PieceSegment> particle = {{"ごとに", "ごとに"}};
+    Report(ApplyPreferKanaDisplay(prefer_kana, &particle) == 0,
+           "すでにかなの区間は置き換えない", "");
+  }
+
+  // -----------------------------------------------------------------------
+  // [11] 確定時のパーソナライズ学習
+  // -----------------------------------------------------------------------
+  std::cout << "\n[11] 確定時のパーソナライズ学習\n";
+  {
+    mozkey::meltype::LanguageMemory& memory =
+        mozkey::meltype::SharedLanguageMemory();
+    // 同層実行の他のテストに影響しないよう、まず記憶されていないことを確かめる。
+    Report(!memory.IsEnglish("kasou"), "Kasou はまだ覚えていない", "");
+    Report(!MeltypeBridge::EndsTemporaryShiftAsciiRun("anoKasou", 's'),
+           "Kasou は同梱辞書には無い (まだ復帰判定が効かない)", "");
+
+    // 確定された語を覚える (Session::CommitStringDirectly が確定のたびに
+    // 呼ぶ部分を直接呼んで確かめる)。
+    const std::size_t before = memory.Count();
+    memory.RememberEnglish("Kasou");
+    Report(memory.Count() == before + 1, "確定した Kasou を覚える",
+           "count " + std::to_string(before) + " -> " +
+               std::to_string(memory.Count()));
+    Report(memory.IsEnglish("kasou"), "覚えた語は小文字でも引ける", "");
+
+    // ユーザーが候補窓から選んだ表記は、次から同じ読みのライブ変換で先頭に
+    // 出る。Mozc の UserHistoryPredictor は学習するが、ライブ変換のプレディット
+    // 先頭には出てこないので、ここで覚えておく。
+    memory.RememberSelection("どわすれ", "ド忘れ");
+    const std::string* chosen = memory.LookupSelection("どわすれ");
+    Report(chosen != nullptr && *chosen == "ド忘れ",
+           "選んだ表記 ド忘れ を読み どわすれ で覚える",
+           chosen == nullptr ? "見つからない" : *chosen);
+    Report(memory.LookupSelection("どしろうと") == nullptr,
+           "覚えていない読みは何も返さない", "");
+    memory.RememberSelection("どわすれ", "ド忘れ");  // 同じ内容は増えない
+    Report(memory.SelectionCount() >= 1, "選択履歴が 1 件以上ある",
+           std::to_string(memory.SelectionCount()));
+
+    // 候補窓から選んだ GPU は、次から英語の 1 かたまりとして扱う。
+    // （英字で確定した語は英単語メモリに入り、セグメンタがそれを英語区間にする）
+    memory.RememberEnglish("GPU");
+    const std::vector<ScoredSegmenter::Segment> gpu_spans =
+        segmenter.SegmentInput("GPUkutte", ScoredSegmenter::Options{});
+    std::string gpu_rendered;
+    for (const auto& span : gpu_spans) {
+      if (!gpu_rendered.empty()) gpu_rendered += "|";
+      gpu_rendered += span.is_english ? "EN:" + span.raw : "JA:" + span.kana;
+    }
+    // GPU が Ḡ のように引き裂かれず、1 つの英語チャンクのまま残ること。
+    ReportEq("GPUkutte: GPU が 1 チャンクのまま", "EN:GPU|JA:くって",
+             gpu_rendered);
+
+    // 選択履歴のキーは打鍵そのもの (raw)。Mozc の読みと違っても引ける。
+    memory.RememberSelection("じーぴーゆー", "GPU");
+    const std::string* gpu_chosen = memory.LookupSelection("じーぴーゆー");
+    Report(gpu_chosen != nullptr && *gpu_chosen == "GPU",
+           "打鍵キーで選んだ表記 GPU を引ける",
+           gpu_chosen == nullptr ? "見つからない" : *gpu_chosen);
+
+    // 打鍵の瞬間（遅延 0ms）から、打っている英単語は打った文字のまま見える。
+    // ライブ変換の遅延を待たないので、速く打っても Ｇぷ が一瞬も出ない。
+    {
+      absl::StatusOr<std::unique_ptr<Engine>> typing_engine_or =
+          MockDataEngineFactory::Create();
+      if (!typing_engine_or.ok()) {
+        Report(false, "GPU 打鍵中に Ｇぷ が出ない", "mock engine を作れない");
+      } else {
+        Session typing_session(**typing_engine_or);
+        Config typing_config;
+        ConfigHandler::GetDefaultConfig(&typing_config);
+        typing_config.set_shift_key_mode_switch(Config::ASCII_INPUT_MODE);
+        typing_config.set_preedit_method(Config::ROMAN);
+        typing_config.set_use_live_conversion(false);
+        typing_config.set_use_dictionary_suggest(false);
+        typing_session.SetConfig(typing_config);
+        Request typing_request;
+        typing_session.SetRequest(typing_request);
+        std::shared_ptr<Table> typing_table = std::make_shared<Table>();
+        typing_table->InitializeWithRequestAndConfig(typing_request,
+                                                     typing_config);
+        typing_session.SetTable(typing_table);
+
+        Command typing_command;
+        typing_session.IMEOn(&typing_command);
+        std::string typing_preedit;
+        for (const char key : std::string("GPU")) {
+          typing_command.Clear();
+          mozc::commands::Input* input = typing_command.mutable_input();
+          input->set_type(mozc::commands::Input::SEND_KEY);
+          input->mutable_key()->set_key_code(
+              static_cast<uint32_t>(static_cast<unsigned char>(key)));
+          typing_session.SendKey(&typing_command);
+          typing_preedit =
+              typing_session.context().composer().GetStringForPreedit();
+        }
+        // 1 文字目から打った文字のまま (G / GP / GPU)。Ｇぷ は一度も出ない。
+        ReportEq("GPU 打鍵中に Ｇぷ が出ない", "GPU", typing_preedit);
+
+        // The preedit that goes over the wire has to be a *complete* protobuf
+        // message.  Preedit::Segment has required fields (annotation, value,
+        // value_length), and leaving one unset made SerializeToString fail on
+        // the server, which the client reported as the "incompatible
+        // conversion engine" dialog.  So serialize exactly what the server
+        // would send and parse it back.
+        const mozc::commands::Output& out = typing_command.output();
+        Report(out.IsInitialized(), "GPU の出力が required を満たす",
+               out.InitializationErrorString());
+        std::string wire;
+        Report(out.SerializeToString(&wire), "GPU の出力をシリアライズできる",
+               "");
+        mozc::commands::Output reparsed;
+        Report(reparsed.ParseFromString(wire),
+               "GPU の出力をクライアントがパースできる", "");
+        Report(reparsed.has_preedit() && reparsed.preedit().segment_size() == 1 &&
+                   reparsed.preedit().segment(0).value() == "GPU" &&
+                   reparsed.preedit().segment(0).value_length() == 3,
+               "パースしたプレディットが GPU (長さ 3)", "");
+        Report(reparsed.preedit().segment(0).has_annotation(),
+               "プレディットの annotation が設定されている", "");
+      }
+    }
+
+    // 覚えた語は実行時のメモリに残り、次の入力から引ける。
+    //
+    // なお、記憶した 1 語だけで必ず英語区間になるとは限らない: 分割は
+    // 全体の点数で決まるので、かなとして読める綴り (kasou → かそう) は
+    // 日本語側が勝つことがある。ここで固定するのはメモリ層そのもの。
+  }
+
+  // -----------------------------------------------------------------------
+  // [Step 3] 変換に渡す Composer を Meltype のピースで組み直す。
+  //
+  // 変換クエリが「Mozc の生ローマ字」ではなく「Meltype の英日ピース」になるので、
+  // 英単語は打ったままの字で変換され、日本語部分は Mozc の多文節変換のまま。
+  // 画面 (変換プレディット) と確定値が一致すること、組み直しが生の打鍵を壊さない
+  // こと (Space 直後・Backspace 直後)、組み直せないときは何も変えないことも
+  // ここで固定する。
+  // -----------------------------------------------------------------------
+  {
+    std::cout << "\n[Step 3: 変換クエリ]\n";
+
+    const std::filesystem::path rebuild_trace_path =
+        std::filesystem::temp_directory_path() /
+        "justtype_session_e2e_meltype_rebuild.log";
+    std::error_code rebuild_remove_error;
+    std::filesystem::remove(rebuild_trace_path, rebuild_remove_error);
+    mozc::session::TraceLogger::SetFilePathForTesting(
+        rebuild_trace_path.string());
+
+    // 打鍵 -> Space で変換 -> 画面 (converter のプレディット) -> Enter で確定値。
+    // Space 直後の raw も持ち帰る: 組み直しが日本語ピースの raw をかなに
+    // 置き換えていたら、ここで user が打った文字と食い違う。
+    struct ConvertOutcome {
+      std::string display;       // 画面 (converter のプレディット)
+      std::string commit;        // Enter で確定する値
+      std::string raw_at_space;  // Space 直後の composer の raw
+    };
+    const auto convert_and_commit = [](const std::string& keys,
+                                       ConvertOutcome* outcome) {
+      std::unique_ptr<SessionRig> rig = MakeSessionRig(/*live_conversion=*/false);
+      if (rig == nullptr) return false;
+      TypeKeys(rig.get(), keys);
+
+      SendSpecialKey(rig.get(), KeyEvent::SPACE);
+      outcome->raw_at_space = rig->session->context().composer().GetRawString();
+      // 画面は converter が組み立てたプレディット (composer の生かなではない)。
+      outcome->display = PreeditText(rig->command);
+
+      SendSpecialKey(rig.get(), KeyEvent::ENTER);
+      outcome->commit = rig->command.output().has_result()
+                            ? rig->command.output().result().value()
+                            : std::string("<no result>");
+      return true;
+    };
+
+    struct ConvertCase {
+      const char* keys;
+      const char* expected_display;  // 画面 (converter のプレディット)
+      const char* expected_commit;   // Enter で確定する値
+    };
+    const ConvertCase convert_cases[] = {
+        // 英単語 + 助詞。Step 3 前は Mozc の生ローマ字読みで変換されていた。
+        {"discordde", "discordで", "discordで"},
+        // 英語ピース + 日本語: 英語は打ったまま、日本語は Mozc の変換。
+        {"GPUkutte", "GPU区って", "GPU区って"},
+        // 多文節変換は Mozc のまま (google だけが英語ピース)。
+        {"kyouhagoogledekensakushita", "今日はgoogleで検索した",
+         "今日はgoogleで検索した"},
+    };
+    for (const ConvertCase& c : convert_cases) {
+      ConvertOutcome outcome;
+      if (!convert_and_commit(c.keys, &outcome)) {
+        Report(false, c.keys, "mock engine を作れない");
+        continue;
+      }
+      ReportEq(absl::StrCat(c.keys, " の変換画面"), c.expected_display,
+               outcome.display);
+      ReportEq(absl::StrCat(c.keys, " の確定値"), c.expected_commit,
+               outcome.commit);
+      // 画面と確定が食い違うのが Step 3 で避けたかった事故。
+      Report(outcome.display == outcome.commit,
+             absl::StrCat(c.keys, " の画面と確定が一致"),
+             "display=[" + outcome.display + "] commit=[" + outcome.commit +
+                 "]");
+      // 組み直しは生の打鍵を保たなければならない。ここが崩れると、次の
+      // Backspace や学習 (打鍵キーで引く) がかな基準になってしまう。
+      ReportEq(absl::StrCat(c.keys, " の Space 直後の raw"), c.keys,
+               outcome.raw_at_space);
+    }
+
+        // 変換を Backspace で取り消したあとも raw は打った文字のまま。
+        // 日本語ピースを 1 チャンクで入れると、ここで raw がかなに化ける
+        // (hiragana transliterator が chunk を割るときに raw を書き換えるため)。
+        // なお CONVERSION での Backspace はまず変換を取り消すだけなので、
+        // 組み直した composition がそのまま残る。
+        {
+          std::unique_ptr<SessionRig> rig =
+              MakeSessionRig(/*live_conversion=*/false);
+          if (rig == nullptr) {
+            Report(false, "変換取り消し後の raw", "mock engine を作れない");
+          } else {
+            const std::string keys = "kyouhagoogledekensakushita";
+            TypeKeys(rig.get(), keys);
+            SendSpecialKey(rig.get(), KeyEvent::SPACE);
+            SendSpecialKey(rig.get(), KeyEvent::BACKSPACE);
+            const std::string raw =
+                rig->session->context().composer().GetRawString();
+            ReportEq("変換取り消し後の raw が打鍵のまま", keys, raw);
+            Report(raw.find_first_not_of(
+                       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") ==
+                       std::string::npos,
+                   "変換取り消し後の raw にかなは混ざらない",
+                   "raw=[" + raw + "]");
+          }
+        }
+
+    // 64 文字を超える生入力は Meltype の動的計画に渡さない (組み直さない)。
+    // 組み直さなかったことは trace の "skipped" で確かめる。
+    {
+      std::unique_ptr<SessionRig> rig =
+          MakeSessionRig(/*live_conversion=*/false);
+      if (rig == nullptr) {
+        Report(false, "70 文字の生入力", "mock engine を作れない");
+      } else {
+        const std::string keys(70, 'a');
+        TypeKeys(rig.get(), keys);
+        SendSpecialKey(rig.get(), KeyEvent::SPACE);
+        ReportEq("70 文字の生入力は組み直さない (raw が保たれる)", keys,
+                 rig->session->context().composer().GetRawString());
+      }
+    }
+
+    // 組み直しの途中でピースを入れられなくなったら、composer は丸ごと元に
+    // 戻る。max_length を打鍵のあとに縮めると必ず失敗させられる。
+    {
+      std::unique_ptr<SessionRig> rig =
+          MakeSessionRig(/*live_conversion=*/false);
+      if (rig == nullptr) {
+        Report(false, "組み直しの巻き戻し", "mock engine を作れない");
+      } else {
+        mozc::session::SessionTestPeer peer(*rig->session);
+        Composer* live_composer = peer.context_()->mutable_composer();
+        TypeKeys(rig.get(), "discordde");
+        const std::string raw_before = live_composer->GetRawString();
+        const size_t length_before = live_composer->GetLength();
+        const size_t cursor_before = live_composer->GetCursor();
+        const mozc::transliteration::TransliterationType mode_before =
+            live_composer->GetInputMode();
+        const size_t max_length_before = live_composer->max_length();
+
+        live_composer->set_max_length(3);
+        Report(!peer.RebuildComposerWithMeltypePieces(live_composer),
+               "ピースを入れられないときは組み直さない", "");
+        ReportEq("巻き戻した raw", raw_before, live_composer->GetRawString());
+        Report(live_composer->GetLength() == length_before &&
+                   live_composer->GetCursor() == cursor_before &&
+                   live_composer->GetInputMode() == mode_before,
+               "巻き戻した composition と入力モード",
+               absl::StrCat("len=", live_composer->GetLength(),
+                            " cursor=", live_composer->GetCursor()));
+        live_composer->set_max_length(max_length_before);
+      }
+    }
+
+    // 組み直しが実際に走ったこと (フォールバックしていないこと) を trace で
+    // 確かめる。生成後のクエリも載るので、ピースの内容まで追える。
+    const std::string rebuild_trace = ReadUtf16LeAsUtf8(rebuild_trace_path);
+    if (!mozc::session::TraceLogger::Enabled()) {
+      ReportSkip("Meltype Rebuild (tracing 無効のため検証スキップ)", "");
+    } else {
+      Report(rebuild_trace.find("Meltype Rebuild") != std::string::npos,
+             "変換直前に Composer が Meltype ピースで組み直される", "");
+      Report(rebuild_trace.find("pieces=") != std::string::npos,
+             "組み直しのピース数が trace に載る", "");
+      Report(rebuild_trace.find("query=[") != std::string::npos,
+             "組み直したあとの変換クエリが trace に載る", "");
+      Report(rebuild_trace.find("query=[discordで]") != std::string::npos,
+             "discordde の組み直し後クエリが discordで", "");
+      Report(rebuild_trace.find("skipped") != std::string::npos,
+             "組み直さなかったことも trace に残る", "");
+    }
+    mozc::session::TraceLogger::SetFilePathForTesting("");
+    std::filesystem::remove(rebuild_trace_path, rebuild_remove_error);
+  }
+
+  // -----------------------------------------------------------------------
+  // [Step 3: ライブ変換]
+  //
+  // 遅延ライブ変換のコールバックも同じ組み直しを通る。ここで固定するのは
+  // (a) 組み直しが Mozc の一時 Shift+英数モードを壊さないこと — 壊すと
+  //     英単語のあとの「を」が生 ASCII のまま流し込まれて行全体がロックする、
+  // (b) 組み直しで変換クエリが Meltype のピースになり、遅延ライブ変換の
+  //     待ち状態 (pending key) の照合もその前の query で行われること。
+  // -----------------------------------------------------------------------
+  {
+    std::cout << "\n[Step 3: ライブ変換]\n";
+
+    const std::filesystem::path live_trace_path =
+        std::filesystem::temp_directory_path() /
+        "justtype_session_e2e_live_rebuild.log";
+    std::error_code live_remove_error;
+    std::filesystem::remove(live_trace_path, live_remove_error);
+    mozc::session::TraceLogger::SetFilePathForTesting(live_trace_path.string());
+
+    // (a) 一時 Shift+英数モードの生存。
+    {
+      std::unique_ptr<SessionRig> rig = MakeSessionRig(/*live_conversion=*/true);
+      if (rig == nullptr) {
+        Report(false, "ライブ変換 (a)", "mock engine を作れない");
+      } else {
+        // 大文字 G / C が Mozc の一時 Shift+英数モードを開く。
+        TypeKeys(rig.get(), "anoGithub Cli");
+        Report(rig->session->context().composer().GetInputMode() == HALF_ASCII,
+               "「anoGithub Cli」の直後は一時 Shift+英数モード",
+               absl::StrCat("mode=",
+                            rig->session->context().composer().GetInputMode()));
+
+        Report(ApplyDelayedLiveConversion(rig.get()),
+               "遅延ライブ変換のコールバックが付く", "");
+        // ここが BLOCKER: 組み直しが EditErase() を使うと入力モードが
+        // ひらがなに戻り、続く「w」が生 ASCII になる。
+        Report(rig->session->context().composer().GetInputMode() == HALF_ASCII,
+               "組み直しのあとも一時 Shift+英数モードのまま",
+               absl::StrCat("mode=",
+                            rig->session->context().composer().GetInputMode()));
+
+        // 続けて日本語を打つと、英単語の終わりでモードが戻る。
+        TypeKeys(rig.get(), "wotsukatte");
+        Report(rig->session->context().composer().GetInputMode() == HIRAGANA,
+               "英単語のあとの「を」でひらがなモードに戻る",
+               absl::StrCat("mode=",
+                            rig->session->context().composer().GetInputMode()));
+
+        SendSpecialKey(rig.get(), KeyEvent::SPACE);
+        // ASCII ロックが起きていれば、ここは「wotsukatte」の生ローマ字に
+        // なる。英語ピースは打ったままの字で、後ろは日本語で変換される。
+        const std::string preedit = PreeditText(rig->command);
+        Report(preedit.find("Github") != std::string::npos &&
+                   preedit.find("を使って") != std::string::npos &&
+                   preedit.find("wotsukatte") == std::string::npos,
+               "ライブ変換をはさんでも英語 + 日本語の変換になる",
+               "preedit=[" + preedit + "]");
+      }
+    }
+
+    // (a') 同じ打鍵をライブ変換なしで。組み直しが user の打った空白を
+    // 落とさないことを、文字列そのもので固定する (既存の非ライブ経路と同じ)。
+    {
+      std::unique_ptr<SessionRig> rig =
+          MakeSessionRig(/*live_conversion=*/false);
+      if (rig == nullptr) {
+        Report(false, "ライブ変換なしの対照", "mock engine を作れない");
+      } else {
+        TypeKeys(rig.get(), "anoGithub Cliwotsukatte");
+        SendSpecialKey(rig.get(), KeyEvent::SPACE);
+        ReportEq("anoGithub Cliwotsukatte の変換画面",
+                 "あのGithub Cliを使って", PreeditText(rig->command));
+      }
+    }
+
+    // (b) 遅延ライブ変換中の組み直し: 変換クエリが Meltype のピースになる。
+    {
+      std::unique_ptr<SessionRig> rig = MakeSessionRig(/*live_conversion=*/true);
+      if (rig == nullptr) {
+        Report(false, "ライブ変換 (b)", "mock engine を作れない");
+      } else {
+        TypeKeys(rig.get(), "discordde");
+        // 組み直し前は Mozc の生読み (ぢsこrっで) なので、これが変わることが
+        // 「組み直しがライブ変換でも効いている」証拠になる。
+        const std::string before =
+            rig->session->context().composer().GetQueryForConversion();
+        Report(before != "discordで", "組み直し前のクエリは Mozc の生読み",
+               "query=[" + before + "]");
+        Report(ApplyDelayedLiveConversion(rig.get()),
+               "discordde で遅延ライブ変換が走る", "");
+        ReportEq("ライブ変換中の変換クエリ", "discordで",
+                 rig->session->context().composer().GetQueryForConversion());
+        Report(rig->command.output().live_conversion(),
+               "ライブ変換として確定待ちになる", "");
+      }
+    }
+
+    // 遅延ライブ変換が待ち状態の input を使い回せていること。組み直しで
+    // query が変わると pending key と一致しなくなり、サジェスト窓が消える。
+    const std::string live_trace = ReadUtf16LeAsUtf8(live_trace_path);
+    if (!mozc::session::TraceLogger::Enabled()) {
+      ReportSkip("遅延ライブ変換 (tracing 無効のため検証スキップ)", "");
+    } else {
+      Report(
+          live_trace.find("held_suggestion_input=reused") != std::string::npos,
+          "遅延ライブ変換が待ち状態の input を使い回す", "");
+    }
+    mozc::session::TraceLogger::SetFilePathForTesting("");
+    std::filesystem::remove(live_trace_path, live_remove_error);
+  }
+
+  // -----------------------------------------------------------------------
   std::cout << "\n" << (g_checks - g_failures) << "/" << g_checks << " PASS"
-            << (g_failures == 0 ? " (すべて通った)\n" : "\n");
+            << (g_failures == 0 ? " (すべて通った)" : "");
+  if (g_skips > 0) {
+    std::cout << ", " << g_skips << " skip";
+  }
+  std::cout << "\n";
   return g_failures == 0 ? 0 : 1;
 }

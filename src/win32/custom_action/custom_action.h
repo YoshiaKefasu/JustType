@@ -109,4 +109,9 @@ UINT __stdcall WriteApValue(MSIHANDLE msi_handle);
 // A rollback custom action for WriteApValue.
 UINT __stdcall WriteApValueRollback(MSIHANDLE msi_handle);
 
+// Signs the current user out.  Offered on the completion dialog because the IME
+// is loaded into every process, so only a fresh logon guarantees the new build
+// is in use everywhere.
+UINT __stdcall LogOffCurrentUser(MSIHANDLE msi_handle);
+
 #endif  // MOZC_WIN32_CUSTOM_ACTION_CUSTOM_ACTION_H_

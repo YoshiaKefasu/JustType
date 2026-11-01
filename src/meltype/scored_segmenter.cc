@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include "meltype/language_memory.h"
+
 namespace mozkey {
 namespace meltype {
 namespace {
@@ -84,6 +86,29 @@ bool IsJapaneseOpener(char c) {
     default:
       return false;
   }
+}
+
+// 英単語の直後に来たときに、そこから日本語の助詞が始まる組み合わせか。
+//
+//   s + 母音 / h / y  … す・さ・し・せ・そ (Android|sumaho, Discord|saba)
+//
+// 「英単語の末尾 1 文字 + 母音」が 1 音として読めるため、辞書の最長一致が
+// その 1 文字を英語側に取り込んでしまう。ここで英語区間の開始を禁じると、DP は
+// その手前で切って英単語本体と助詞に分ける。
+//
+// 'd' はここでは扱わない。'd' + 母音は英語の中にも普通にある (goodday の day)
+// ので、区間の開始を禁じると英単語の途中で切れてしまう。'd' の衝突は
+// EndsWithParticleHead() が「区間の末尾」で判定する。
+//
+// 直前が英字であることだけを見るので、空白で区切られた英文の 2 語目
+// ("Google search" の search) は今までどおり英語のまま。
+bool StartsJapaneseParticleAt(std::string_view input, int i) {
+  if (i <= 0 || i + 1 >= static_cast<int>(input.size())) return false;
+  if (!IsAsciiLetter(input[static_cast<std::size_t>(i) - 1])) return false;
+  const char c = input[static_cast<std::size_t>(i)];
+  const char next = input[static_cast<std::size_t>(i) + 1];
+  if (c == 's') return IsJapaneseOpener(next);
+  return false;
 }
 
 // ドット付きの製品名・ファイル名の末尾として認める拡張子。ここを列挙するのは、
@@ -201,6 +226,24 @@ bool IsPediaEnglishWord(std::string_view lower) {
 }
 
 // する の活用 (して・した・します …) だけでできたかなか。
+// 英語区間の末尾 1 文字が、すぐ後ろの母音と 1 音を作って日本語の助詞の頭に
+// なるか。区間 [i, end) の |end| 位置を見る。
+//
+//   's' + 母音 / h / y  -> さ・し・す・せ・そ
+//   'd' + e / a         -> で・だ
+//
+// 直前が英字であることだけを見るので、空白で区切られた英文の 2 語目は
+// 今までどおり英語のまま。
+bool EndsWithParticleHead(std::string_view input, int end) {
+  if (end <= 0 || end >= static_cast<int>(input.size())) return false;
+  if (!IsAsciiLetter(input[static_cast<std::size_t>(end) - 1])) return false;
+  const char c = input[static_cast<std::size_t>(end) - 1];
+  const char next = input[static_cast<std::size_t>(end)];
+  if (c == 's') return IsJapaneseOpener(next);
+  if (c == 'd') return next == 'e' || next == 'a';
+  return false;
+}
+
 bool IsSuruForm(std::string_view kana) {
   bool starts = false;
   for (std::string_view form : kSuruForms) {
@@ -677,6 +720,9 @@ bool Context::IsEnglishSpan(std::string_view span, bool at_end, int before,
   // 識別子 (S3, C++, N+1, node.js) は英字だけではないが 1 語として英語。
   if (IsIdentifierToken(span)) return true;
   const std::string lower = ToLowerAscii(span);
+  // ユーザーが英字で確定した語 (Kasou など同梱辞書に無い語) は英語として扱う。
+  // これが無いと、確定しても次の入力で日本語に戻ってしまう。
+  if (SharedLanguageMemory().IsEnglish(lower)) return true;
   // 英字だけの区間はこの下の判定に任せる。数字や記号を含む区間は、辞書に
   // 載っている綴り (k8s, e2e, ipv4) だけを英語にする。同梱の英単語の一覧は
   // 英字だけなので、辞書に無い数字混じりの綴りは日本語のまま残る。
@@ -1178,17 +1224,15 @@ std::vector<Segment> Context::Run() {
       // 英語の区間として i から j まで取る (IsEnglishSpan が英語と言える区間だけ)。
       //
       // 英単語のすぐ後ろの 's' + 母音は日本語の頭 (Discord|saba, Slack|sumaho,
-      // Chrome|sa-ba)。ここから英語の区間を始めると、saba や sumaho のように
-      // それ自体が英単語としても登録されている綴りが複数形の続きとして飲まれ、
-      // Discord ごと 1 語に化ける。判定は直前の 1 文字が英字かどうかだけを見る
+      // Chrome|sa-ba)、'd' + e/a も同じ (Tauri|dekimasu)。ここから英語の区間を
+      // 始めると、saba や sumaho のようにそれ自体が英単語としても登録されている
+      // 綴りや、taurid のようなマイナー語が複数形・語尾の続きとして飲まれ、
+      // 英単語ごと 1 語に化ける。判定は直前の 1 文字が英字かどうかだけを見る
       // (空白で区切られた英文の 2 語目、"Google search" の search は直前が空白
       // なので今までどおり英語のまま)。この位置ごとに決まるので、ループの外で
       // 判定して、該当するときは英語の区間を取るループごと飛ばす。
-      const bool s_starts_japanese =
-          i > 0 && input_[static_cast<std::size_t>(i)] == 's' &&
-          IsAsciiLetter(input_[static_cast<std::size_t>(i) - 1]) &&
-          i + 1 < n_ && IsJapaneseOpener(input_[static_cast<std::size_t>(i) + 1]);
-      for (int j = n_; j > i && !s_starts_japanese; --j) {
+      const bool particle_starts_here = StartsJapaneseParticleAt(input_, i);
+      for (int j = n_; j > i && !particle_starts_here; --j) {
         // 英単語 + は に分かれるところの 1 音 (medals の後の sha) は、それだけで
         // 英単語にしない (medalssha になってしまう)。
         if (j == i + 3 && split_particle_[static_cast<std::size_t>(i)]) continue;
@@ -1215,13 +1259,17 @@ std::vector<Segment> Context::Run() {
             IsSuruForm(JapaneseKana(j - 1, n_))) {
           continue;
         }
-        // 英語の末尾 's' が後続の母音と 1 音 (sa/shi/su/se/so) を作るなら、その
-        // 's' は複数形ではなく後ろに続く日本語の頭。Android|sumaho を
-        // Androids|umaho にしない (複数形の 's' と「す」の 's' の衝突)。
+        // 英語の末尾 1 文字が後続の母音と 1 音を作って日本語の助詞の頭になるなら、
+        // その文字は英単語の一部ではなく後ろに続く日本語の頭。
+        //
+        //   's' + 母音 → さ・し・す・せ・そ (Android|sumaho)
+        //   'd' + e/a  → で・だ            (Tauri|dekimasu)
+        //
         // 区間 [i, j) を却下すると DP は j-1 で切るので、英単語本体
-        // (Android) が英語、's' から先が日本語になる。
-        if (j - i >= 3 && j < n_ &&
-            input_[static_cast<std::size_t>(j) - 1] == 's' &&
+        // (Android / Tauri) が英語、その 1 文字から先が日本語になる。
+        // これが無いと、辞書にある長い綴り (Androids, Taurid) が長さの 2 乗で
+        // 勝って、後続の日本語をごっそり英語側に飲み込む。
+        if (j - i >= 3 && EndsWithParticleHead(input_, j) &&
             syllable_readable_[static_cast<std::size_t>(j) - 1] &&
             syllable_length_[static_cast<std::size_t>(j) - 1] >= 2) {
           continue;
@@ -1335,6 +1383,29 @@ std::size_t MeltypeDictionaries::LoadFromDirectory(const std::string& directory,
   out.proper.BuildIndex();
   out.spell.BuildIndex();
   out.readable.BuildIndex();
+
+  // ライブ変換でかなのまま見せる読み。ひらがなを含むので WordList ではなく素の
+  // 集合に入れる。1 行 1 読み、# 以降と空行はコメントとして読み飛ばす。
+  const std::string prefer_kana = read(join("prefer_kana.txt"));
+  if (!prefer_kana.empty()) {
+    std::size_t begin = 0;
+    while (begin <= prefer_kana.size()) {
+      const std::size_t end = prefer_kana.find('\n', begin);
+      const std::size_t stop =
+          (end == std::string::npos) ? prefer_kana.size() : end;
+      std::string line = prefer_kana.substr(begin, stop - begin);
+      while (!line.empty() && (line.back() == '\r' || line.back() == ' ' ||
+                               line.back() == '\t')) {
+        line.pop_back();
+      }
+      if (!line.empty() && line.front() != '#') {
+        out.prefer_kana.insert(std::move(line));
+        ++total;
+      }
+      if (end == std::string::npos) break;
+      begin = end + 1;
+    }
+  }
   return total;
 }
 

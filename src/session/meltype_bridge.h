@@ -30,10 +30,13 @@
 #ifndef MOZC_SESSION_MELTYPE_BRIDGE_H_
 #define MOZC_SESSION_MELTYPE_BRIDGE_H_
 
+#include <cstddef>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <unordered_set>
+#include <vector>
 
 #include "meltype/scored_segmenter.h"
 
@@ -55,6 +58,13 @@ namespace session {
 // keep in sync.
 class MeltypeBridge {
  public:
+  // Upper bound on the length of a romaji buffer this bridge segments.  The
+  // dynamic program is quadratic in the buffer length, so the two callers that
+  // run it on the composing buffer give up beyond this length rather than stall
+  // the key-event thread: EndsTemporaryShiftAsciiRun() on every keystroke, and
+  // Session::RebuildComposerWithMeltypePieces() right before a conversion.
+  static constexpr std::size_t kMaxRunLength = 64;
+
   // Segments one romaji string into English and Japanese spans.
   // Returns an empty vector when the dictionaries are unavailable.
   static std::vector<mozkey::meltype::ScoredSegmenter::Segment> SegmentRomaji(
@@ -102,6 +112,19 @@ class MeltypeBridge {
   //
   // 0 means "nothing to rewrite".
   static std::size_t JapaneseTailLength(std::string_view raw, char letter);
+
+  // The readings Japanese writes in kana far more often than in kanji
+  // (prefer_kana.txt, derived from JPDB frequency ranks: こと, もの, ごとに,
+  // わけ …).
+  //
+  // Live conversion uses this to keep such a segment as the kana the user typed
+  // instead of showing the kanji Mozc picked.  Space conversion does not ask:
+  // the candidate list stays Mozc's own, so 事 / 毎 に are still one keystroke
+  // away whenever the user wants them.
+  //
+  // Empty when the dictionaries are unavailable, so the feature simply turns
+  // off rather than guessing.
+  static const std::unordered_set<std::string>& PreferKanaReadings();
 
 
   // Starts loading the dictionaries on a background thread so that the first

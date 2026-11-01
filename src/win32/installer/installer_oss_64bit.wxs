@@ -120,6 +120,11 @@
 
     <!-- Set Add/Remove Program Icon -->
     <Icon Id="add_remove_program_icon.ico" SourceFile="$(var.AddRemoveProgramIconPath)" />
+    <!-- Every dialog control that does not name its own style uses this.
+         Without it MSI falls back to the ancient system font, which is what
+         made the completion dialog look broken on Japanese Windows.
+    -->
+    <Property Id="DefaultUIFont" Value="JustTypeFont" />
     <Property Id="ARPPRODUCTICON" Value="add_remove_program_icon.ico" />
 
     <!-- Disable Modify and Repair buttons. -->
@@ -141,8 +146,36 @@
     </Upgrade>
 
     <UI>
+      <TextStyle Id="JustTypeFont" FaceName="Yu Gothic UI" Size="9" />
+      <TextStyle Id="JustTypeFontTitle" FaceName="Yu Gothic UI" Size="11" Bold="yes" />
       <Error Id="4000" Message="新しいバージョンの JustType が既にインストールされています。" />
+
+      <!-- Installation progress.  The IME is a TSF module that every process
+           loads at start-up, so the dialog below ends by offering a sign-out. -->
+      <Dialog Id="JustTypeProgressDlg" Width="370" Height="270" Title="JustType セットアップ" NoMinimize="yes" Modeless="yes">
+        <Control Id="ProgressTitle" Type="Text" X="20" Y="20" Width="330" Height="24" Transparent="yes" NoPrefix="yes" TabSkip="no" Text="JustType をインストールしています" />
+        <Control Id="ProgressBar" Type="ProgressBar" X="20" Y="60" Width="330" Height="17" ProgressBlocks="yes" Text="インストールを進めています..." />
+        <Control Id="ProgressStatus" Type="Text" X="20" Y="85" Width="330" Height="17" Transparent="yes" NoPrefix="yes" Text="[Progress1] [Progress2]" />
+      </Dialog>
+
+      <!-- Completion notice.  [~] is the MSI line break. -->
+      <Dialog Id="SignOutNoticeDlg" Width="370" Height="270" Title="JustType セットアップ完了" NoMinimize="yes">
+        <Control Id="NoticeTitle" Type="Text" X="20" Y="20" Width="330" Height="24" Transparent="yes" NoPrefix="yes" Text="{\JustTypeFontTitle}JustType セットアップ完了" />
+        <Control Id="NoticeMessage" Type="Text" X="20" Y="55" Width="330" Height="150" Transparent="yes" NoPrefix="yes" Text="JustType のインストールが正常に完了しました。新しい IME の設定・モジュールを完全に反映するため、一度 Windows からログアウト（サインアウト）して再ログインしてください。" />
+        <Control Id="LogOutLater" Type="PushButton" X="155" Y="235" Width="100" Height="20" Text="後でサインアウト(&amp;A)" Default="yes" Cancel="yes">
+          <Publish Event="EndDialog" Value="Return" Order="1" />
+        </Control>
+        <Control Id="LogOutNow" Type="PushButton" X="260" Y="235" Width="100" Height="20" Text="今すぐサインアウト(&amp;L)">
+          <Publish Event="DoAction" Value="LogOffCurrentUser" Order="1" />
+          <Publish Event="EndDialog" Value="Return" Order="2" />
+        </Control>
+      </Dialog>
     </UI>
+
+    <InstallUISequence>
+      <Show Dialog="JustTypeProgressDlg" Before="ExecuteAction" />
+      <Show Dialog="SignOutNoticeDlg" OnExit="success" />
+    </InstallUISequence>
 
     <Feature Id="JustTypeInstall" Title="JustType" Level="1">
       <ComponentRef Id="JustTypeTIP32" />
@@ -181,6 +214,7 @@
       <ComponentRef Id="MeltypeEnglishReadableList" />
       <ComponentRef Id="MeltypeJapaneseList" />
       <ComponentRef Id="MeltypeProperNounsList" />
+      <ComponentRef Id="MeltypePreferKanaList" />
 
       <ComponentRef Id="GenInterfaceFontRegular" />
       <ComponentRef Id="GenInterfaceFontBold" />
@@ -207,6 +241,7 @@
     <CustomAction Id="InstallJustTypeFirewallRulesRollback" DllEntry="RemoveJustTypeFirewallRules" Execute="rollback" Impersonate="no" Return="ignore" BinaryRef="JustType_installer_helper.dll" />
     <CustomAction Id="RemoveJustTypeFirewallRules" DllEntry="RemoveJustTypeFirewallRules" Execute="deferred" Impersonate="no" Return="ignore" BinaryRef="JustType_installer_helper.dll" />
     <CustomAction Id="NewerVersionError" Error="4000" />
+    <CustomAction Id="LogOffCurrentUser" DllEntry="LogOffCurrentUser" Execute="immediate" Impersonate="yes" Return="ignore" BinaryRef="JustType_installer_helper.dll" />
 
     <!--
       Deferred and rollback custom actions run outside the client session and
@@ -402,6 +437,9 @@
           </Component>
           <Component Id="MeltypeProperNounsList">
             <File Id="meltype_propernouns_txt" Name="propernouns.txt" DiskId="1" Source="$(var.MeltypeProperNounsPath)" Vital="yes" KeyPath="yes" />
+          </Component>
+          <Component Id="MeltypePreferKanaList">
+            <File Id="meltype_prefer_kana_txt" Name="prefer_kana.txt" DiskId="1" Source="$(var.MeltypePreferKanaPath)" Vital="yes" KeyPath="yes" />
           </Component>
         </Directory>
 

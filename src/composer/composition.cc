@@ -68,6 +68,20 @@ size_t Composition::InsertKeyAndPreeditAt(const size_t pos, std::string key,
   return InsertInput(pos, std::move(composition_input));
 }
 
+size_t Composition::InsertKeyAndFixedConversionAt(const size_t pos,
+                                                  std::string key,
+                                                  std::string conversion) {
+  if (conversion.empty()) {
+    // A fixed chunk cannot be represented without a conversion: the raw input
+    // would fall back to the table lookup and would no longer be preserved.
+    return pos;
+  }
+  CompositionInput composition_input;
+  composition_input.InitFromRawAndFixedConversion(std::move(key),
+                                                  std::move(conversion));
+  return InsertInput(pos, std::move(composition_input));
+}
+
 size_t Composition::InsertInput(size_t pos, CompositionInput input) {
   if (input.Empty()) {
     return pos;
@@ -186,6 +200,18 @@ size_t Composition::ConvertPosition(
   // chunk_length_to is 2), the converted position is adjusted from
   // the beginning of the chunk (ie. "t|to").
   return position_to + inner_position_from;
+}
+
+size_t Composition::ConvertPositionToRaw(
+    const size_t composition_position) const {
+  return ConvertPosition(composition_position, Transliterators::LOCAL,
+                         Transliterators::RAW_STRING);
+}
+
+size_t Composition::ConvertPositionToComposition(
+    const size_t raw_position) const {
+  return ConvertPosition(raw_position, Transliterators::RAW_STRING,
+                         Transliterators::LOCAL);
 }
 
 size_t Composition::SetDisplayMode(
